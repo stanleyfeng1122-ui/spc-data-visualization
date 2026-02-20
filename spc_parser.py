@@ -310,39 +310,49 @@ def detect_dimension_groups(dimensions: OrderedDict) -> Dict[str, List[str]]:
     Auto-detect dimension groups by analysing description keywords.
 
     Returns a dict of group_display_name -> list of dim_no strings.
-    E.g. {"Z-Straightness: SPC_A / SPC_C / SPC_D / SPC_FF": ["SPC_A","SPC_C","SPC_D","SPC_FF"]}
-
+    Groups dimensions that share a common keyword in their description.
+    Dimensions without a matching keyword are placed in individual groups.
     Also includes an "All dimensions" pseudo-group.
     """
     # Build keyword -> list of dim_nos mapping
     keyword_map: Dict[str, List[Tuple[str, str]]] = {}  # keyword -> [(dim_no, description)]
+    ungrouped: List[Tuple[str, str]] = []  # dims with no keyword match
 
     for dno, dmeta in dimensions.items():
         desc = dmeta.description.lower().strip()
         if not desc:
+            ungrouped.append((dno, ""))
             continue
 
-        # Extract a grouping keyword from the description.
-        # Strategy: look for common patterns like "z straightness", "flatness",
-        # "overall length", "half width", "half length", "height", etc.
         keyword = _extract_group_keyword(desc)
         if keyword:
             keyword_map.setdefault(keyword, []).append((dno, dmeta.description))
+        else:
+            ungrouped.append((dno, dmeta.description))
 
     groups: Dict[str, List[str]] = OrderedDict()
 
+    # Keyword-matched groups (2+ dimensions sharing a keyword)
     for keyword, dim_list in keyword_map.items():
-        if len(dim_list) < 2:
-            # Only create groups with 2+ dimensions
-            continue
+        if len(dim_list) >= 2:
+            dim_nos = [d[0] for d in dim_list]
+            dim_labels = " / ".join(dim_nos)
+            display_keyword = keyword.replace("_", " ").title()
+            group_label = f"{display_keyword}: {dim_labels}"
+            groups[group_label] = dim_nos
+        else:
+            # Single-member keyword group -> treat as individual
+            ungrouped.extend(dim_list)
 
-        dim_nos = [d[0] for d in dim_list]
-        # Build display label
-        dim_labels = " / ".join(dim_nos)
-        # Capitalize keyword for display
-        display_keyword = keyword.replace("_", " ").title()
-        group_label = f"{display_keyword}: {dim_labels}"
-        groups[group_label] = dim_nos
+    # Individual dimension entries
+    for dno, desc in ungrouped:
+        label = f"{dno} - {desc}" if desc else dno
+        groups[label] = [dno]
+
+    # "All dimensions" pseudo-group
+    if len(dimensions) > 1:
+        all_dim_nos = list(dimensions.keys())
+        groups["All dimensions"] = all_dim_nos
 
     return groups
 

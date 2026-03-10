@@ -140,6 +140,7 @@ def build_combined_chart(
     row_by: str = "None",
     custom_color_map: dict = None,
     custom_yrange: list = None,
+    selected_points: list = None,
 ):
     """Build the combined profile chart with section and row facets."""
     deviation_mode = y_axis_mode == "Deviation from Nominal"
@@ -164,6 +165,9 @@ def build_combined_chart(
     else:
         color_map = {g: get_color_for_group(i) for i, g in enumerate(unique_colors)}
 
+    # Normalise selected_points to a set for O(1) lookup; None/empty means show all
+    _point_filter = set(selected_points) if selected_points else None
+
     dim_point_info = OrderedDict()
     for dno in dim_nos:
         if dno not in dim_metas:
@@ -173,7 +177,7 @@ def build_combined_chart(
         col_labels, point_numbers, nominal, usl, lsl = info
         valid = [(cl, pn, n, u, l) for cl, pn, n, u, l in
                  zip(col_labels, point_numbers, nominal, usl, lsl)
-                 if cl in df.columns]
+                 if cl in df.columns and (_point_filter is None or pn in _point_filter)]
         if valid:
             cls, pns, noms, usls, lsls = zip(*valid)
             dim_point_info[dno] = (list(cls), list(pns), list(noms), list(usls), list(lsls))
@@ -206,7 +210,6 @@ def build_combined_chart(
 
     all_tick_vals = []
     all_tick_text = []
-    section_centers = []
     section_boundaries = []
 
     x_offset = 0
@@ -227,8 +230,6 @@ def build_combined_chart(
 
         section_end_x = x_offset
         section_x_ranges[sec_label] = (section_start_x, section_end_x)
-        section_centers.append(((section_start_x + section_end_x) / 2, sec_label))
-
         if sec_idx < len(unique_sections) - 1:
             section_boundaries.append(x_offset + section_gap / 2)
             x_offset += section_gap
@@ -317,31 +318,6 @@ def build_combined_chart(
         fig.add_vline(x=bx, line=dict(color="rgba(100,116,139,0.5)", width=1.5, dash="solid"))
 
     annotations = []
-    factory_sections = OrderedDict()
-    for center_x, sec_label in section_centers:
-        parts = sec_label.split(None, 1)
-        if len(parts) == 2:
-            factory, build = parts
-        else:
-            factory = sec_label
-            build = ""
-        factory_sections.setdefault(factory, []).append((center_x, build))
-
-    xref = "x"
-    for factory, builds in factory_sections.items():
-        factory_center = sum(cx for cx, _ in builds) / len(builds)
-        annotations.append(dict(
-            x=factory_center, y=1.08, xref=xref, yref="paper",
-            text=f"<b>{factory}</b>", showarrow=False,
-            font=dict(size=13, color="#1E293B"),
-        ))
-        for cx, build_label in builds:
-            if build_label:
-                annotations.append(dict(
-                    x=cx, y=1.03, xref=xref, yref="paper",
-                    text=f"<b>{build_label}</b>", showarrow=False,
-                    font=dict(size=11, color="#475569"),
-                ))
 
     is_group = len(dim_nos) > 1
     if is_group:
@@ -387,7 +363,7 @@ def build_combined_chart(
             font=dict(size=15), x=0.5, xanchor="center",
         ),
         height=chart_height,
-        margin=dict(l=50, r=120, t=100, b=80),
+        margin=dict(l=50, r=120, t=60, b=80),
         legend=dict(
             title=dict(text=color_by if color_by != "None" else ""),
             orientation="v", yanchor="top", y=1, xanchor="left", x=1.02,
@@ -458,9 +434,13 @@ def build_box_plot(
     row_by: str = "None",
     custom_color_map: dict = None,
     custom_yrange: list = None,
+    selected_points: list = None,
 ):
     """Build a box plot showing the distribution of measurements at each point."""
     deviation_mode = y_axis_mode == "Deviation from Nominal"
+
+    # Normalise selected_points to a set for O(1) lookup; None/empty means show all
+    _point_filter = set(selected_points) if selected_points else None
 
     row_labels = compute_row_groups(df, row_by)
     unique_rows = list(dict.fromkeys(row_labels))
@@ -505,7 +485,7 @@ def build_box_plot(
             )
             valid = [(cl, pn, n, u, l) for cl, pn, n, u, l in
                      zip(col_labels, point_nums, nominals, usls, lsls)
-                     if cl in df.columns]
+                     if cl in df.columns and (_point_filter is None or pn in _point_filter)]
             if not valid:
                 continue
 
@@ -616,8 +596,12 @@ def build_histogram(
     nbins: int = 40,
     row_by: str = "None",
     custom_color_map: dict = None,
+    selected_points: list = None,
 ):
     """Build a histogram showing frequency distribution of measurement values."""
+    # Normalise selected_points to a set for O(1) lookup; None/empty means show all
+    _point_filter = set(selected_points) if selected_points else None
+
     valid_dim_nos = [d for d in dim_nos if d in dim_metas]
     n_dim_cols = len(valid_dim_nos)
     if n_dim_cols == 0:
@@ -670,10 +654,11 @@ def build_histogram(
 
         for col_idx, dno in enumerate(valid_dim_nos, 1):
             dmeta = dim_metas[dno]
-            col_labels, _, nominals, usls, lsls = get_filtered_dim_meta(
+            col_labels, point_nums, nominals, usls, lsls = get_filtered_dim_meta(
                 dmeta, exclude_intervals=exclude_intervals
             )
-            valid_cols = [c for c in col_labels if c in df.columns]
+            valid_cols = [c for c, pn in zip(col_labels, point_nums)
+                          if c in df.columns and (_point_filter is None or pn in _point_filter)]
             if not valid_cols:
                 continue
 

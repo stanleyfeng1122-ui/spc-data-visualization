@@ -15,6 +15,7 @@ Chart model (combined profile view):
 """
 
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
@@ -717,6 +718,65 @@ if fig is None:
 
 finalize_plotly_style(fig)
 st.plotly_chart(fig, use_container_width=True, key="main_chart")
+
+# ---------------------------------------------------------------------------
+# Click-to-highlight (JMP-style) for Combined Profile chart
+# ---------------------------------------------------------------------------
+if chart_type == "Combined Profile":
+    _highlight_js = """
+<script>
+(function() {
+    function setupClickHighlight() {
+        var plotDivs = window.parent.document.querySelectorAll('.js-plotly-plot');
+        if (plotDivs.length === 0) {
+            setTimeout(setupClickHighlight, 500);
+            return;
+        }
+        var plotDiv = plotDivs[plotDivs.length - 1];
+        if (plotDiv._clickHighlightSetup) return;
+        plotDiv._clickHighlightSetup = true;
+
+        var highlightedTrace = null;
+        var defaultOpacity = 0.45;
+        var defaultWidth = 0.7;
+        var highlightOpacity = 1.0;
+        var highlightWidth = 2.5;
+        var dimOpacity = 0.08;
+        var dimWidth = 0.4;
+
+        plotDiv.on('plotly_click', function(data) {
+            var traceIndex = data.points[0].curveNumber;
+
+            if (highlightedTrace === traceIndex) {
+                // Same trace clicked again -- reset all to default
+                Plotly.restyle(plotDiv, {'opacity': defaultOpacity, 'line.width': defaultWidth});
+                highlightedTrace = null;
+            } else {
+                // Highlight clicked trace, dim all others
+                var nTraces = plotDiv.data.length;
+                var opacities = [];
+                var widths = [];
+                for (var i = 0; i < nTraces; i++) {
+                    opacities.push(dimOpacity);
+                    widths.push(dimWidth);
+                }
+                opacities[traceIndex] = highlightOpacity;
+                widths[traceIndex] = highlightWidth;
+                Plotly.restyle(plotDiv, {'opacity': opacities, 'line.width': widths});
+                highlightedTrace = traceIndex;
+            }
+        });
+
+        plotDiv.on('plotly_doubleclick', function() {
+            Plotly.restyle(plotDiv, {'opacity': defaultOpacity, 'line.width': defaultWidth});
+            highlightedTrace = null;
+        });
+    }
+    setTimeout(setupClickHighlight, 1000);
+})();
+</script>
+"""
+    components.html(_highlight_js, height=0)
 
 # ---------------------------------------------------------------------------
 # Summary Statistics – Professional SPC Analytics

@@ -9,6 +9,7 @@ behaviour after code changes.
 import os
 import sys
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
@@ -283,6 +284,28 @@ if not selected_dim_nos:
     st.info("Select at least one dimension from the sidebar.")
     st.stop()
 
+# Collect all point numbers for the selected dimensions to populate the points filter.
+# We intentionally do NOT apply exclude_intervals here so the options list always
+# shows the full set of points; the chart functions apply that filter internally.
+_all_point_numbers = []
+for _dno in selected_dim_nos:
+    if _dno in all_dimensions:
+        _meta = all_dimensions[_dno]
+        _cls, _pns, _noms, _usls, _lsls = get_filtered_dim_meta(_meta, exclude_intervals=False)
+        for _pn in _pns:
+            if _pn and _pn not in _all_point_numbers:
+                _all_point_numbers.append(_pn)
+
+selected_points = st.sidebar.multiselect(
+    "Points to display",
+    options=_all_point_numbers,
+    default=_all_point_numbers,
+    key="qt_points",
+)
+# Empty selection is treated as "show all" for backward compatibility
+if not selected_points:
+    selected_points = None
+
 # Options
 exclude_intervals = st.sidebar.checkbox("Exclude interval points", value=True, key="qt_excl")
 
@@ -390,6 +413,7 @@ if chart_type == "Combined Profile":
         y_axis_mode=y_axis_mode, exclude_intervals=exclude_intervals,
         group_label=selected_group_label, row_by=row_by,
         custom_color_map=custom_color_map, custom_yrange=custom_yrange,
+        selected_points=selected_points,
     )
 elif chart_type == "Box Plot":
     fig = build_box_plot(
@@ -397,6 +421,7 @@ elif chart_type == "Box Plot":
         color_by=color_by, y_axis_mode=y_axis_mode,
         exclude_intervals=exclude_intervals, group_label=selected_group_label,
         row_by=row_by, custom_color_map=custom_color_map, custom_yrange=custom_yrange,
+        selected_points=selected_points,
     )
 elif chart_type == "Histogram":
     fig = build_histogram(
@@ -404,6 +429,7 @@ elif chart_type == "Histogram":
         color_by=color_by, exclude_intervals=exclude_intervals,
         group_label=selected_group_label, nbins=hist_nbins,
         row_by=row_by, custom_color_map=custom_color_map,
+        selected_points=selected_points,
     )
 
 if fig is None:
@@ -412,6 +438,65 @@ if fig is None:
 
 finalize_plotly_style(fig)
 st.plotly_chart(fig, use_container_width=True, key="qt_main_chart")
+
+# ---------------------------------------------------------------------------
+# Click-to-highlight (JMP-style) for Combined Profile chart
+# ---------------------------------------------------------------------------
+if chart_type == "Combined Profile":
+    _highlight_js = """
+<script>
+(function() {
+    function setupClickHighlight() {
+        var plotDivs = window.parent.document.querySelectorAll('.js-plotly-plot');
+        if (plotDivs.length === 0) {
+            setTimeout(setupClickHighlight, 500);
+            return;
+        }
+        var plotDiv = plotDivs[plotDivs.length - 1];
+        if (plotDiv._clickHighlightSetup) return;
+        plotDiv._clickHighlightSetup = true;
+
+        var highlightedTrace = null;
+        var defaultOpacity = 0.45;
+        var defaultWidth = 0.7;
+        var highlightOpacity = 1.0;
+        var highlightWidth = 2.5;
+        var dimOpacity = 0.08;
+        var dimWidth = 0.4;
+
+        plotDiv.on('plotly_click', function(data) {
+            var traceIndex = data.points[0].curveNumber;
+
+            if (highlightedTrace === traceIndex) {
+                // Same trace clicked again -- reset all to default
+                Plotly.restyle(plotDiv, {'opacity': defaultOpacity, 'line.width': defaultWidth});
+                highlightedTrace = null;
+            } else {
+                // Highlight clicked trace, dim all others
+                var nTraces = plotDiv.data.length;
+                var opacities = [];
+                var widths = [];
+                for (var i = 0; i < nTraces; i++) {
+                    opacities.push(dimOpacity);
+                    widths.push(dimWidth);
+                }
+                opacities[traceIndex] = highlightOpacity;
+                widths[traceIndex] = highlightWidth;
+                Plotly.restyle(plotDiv, {'opacity': opacities, 'line.width': widths});
+                highlightedTrace = traceIndex;
+            }
+        });
+
+        plotDiv.on('plotly_doubleclick', function() {
+            Plotly.restyle(plotDiv, {'opacity': defaultOpacity, 'line.width': defaultWidth});
+            highlightedTrace = null;
+        });
+    }
+    setTimeout(setupClickHighlight, 1000);
+})();
+</script>
+"""
+    components.html(_highlight_js, height=0)
 
 # ---------------------------------------------------------------------------
 # Summary Statistics

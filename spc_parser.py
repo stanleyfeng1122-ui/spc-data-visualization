@@ -91,9 +91,96 @@ def _is_interval_point(point_label: str) -> bool:
 # Core parser
 # ---------------------------------------------------------------------------
 
+def _find_dim_no_cell(rows, max_scan_rows=50, max_scan_cols=30):
+    """
+    Scan the top-left area of a sheet looking for a cell that says "Dim. No."
+    (case-insensitive).  Returns (row_1based, col_1based) or (None, None).
+    """
+    for ri in range(min(max_scan_rows, len(rows))):
+        row = rows[ri]
+        for ci in range(min(max_scan_cols, len(row))):
+            val = row[ci].value
+            if val is not None and re.match(r"dim\.?\s*no\.?", str(val).strip(), re.IGNORECASE):
+                return ri + 1, ci + 1  # 1-based
+    return None, None
+
+
+def _scan_label_rows(rows, label_col, start_row, end_row):
+    """
+    Scan a label column for known metadata row labels.
+    Returns a dict: normalised_label -> row_1based.
+    """
+    mapping = {}
+    for ri in range(start_row - 1, min(end_row, len(rows))):
+        row = rows[ri]
+        if label_col - 1 >= len(row):
+            continue
+        val = row[label_col - 1].value
+        if val is None:
+            continue
+        s = str(val).strip().lower()
+        # Normalise common variants
+        label_map = {
+            "dim. no.": "dim_no", "dim no.": "dim_no", "dim. no": "dim_no",
+            "dimension description": "description",
+            "dimension type": "dim_type",
+            "point number (if applicable)": "point_number",
+            "point number": "point_number", "point no.": "point_number",
+            "nominal dim.": "nominal", "nominal": "nominal",
+            "tol. max. (+)": "tol_max", "tol. max (+)": "tol_max",
+            "tol max (+)": "tol_max", "tol max": "tol_max",
+            "tol. min. (-)": "tol_min", "tol. min (-)": "tol_min",
+            "tol min (-)": "tol_min", "tol min": "tol_min",
+            "usl": "usl", "lsl": "lsl",
+            "start point": "start_point",
+            "sn": "sn",
+            "process": "process",
+        }
+        if s in label_map:
+            mapping[label_map[s]] = ri + 1  # 1-based
+    return mapping
+
+
+def _find_data_start(rows, label_col, data_col_start, after_row, max_search=60):
+    """
+    Find where measurement data rows begin by looking for:
+    1. A header row containing "Start Point" or "SN" in any column
+    2. First row after metadata with numeric values in data columns
+    Returns (header_row_1based_or_None, data_start_row_1based).
+    """
+    # Strategy 1: look for "Start Point" or "SN" text in the label area
+    for ri in range(after_row - 1, min(after_row + max_search, len(rows))):
+        row = rows[ri]
+        for ci in range(min(15, len(row))):
+            val = row[ci].value
+            if val is None:
+                continue
+            s = str(val).strip().lower()
+            if s == "start point":
+                return ri + 1, ri + 2  # header row, data starts next row
+            if s == "sn":
+                return ri + 1, ri + 2
+
+    # Strategy 2: find first row with numeric data in dimension columns
+    for ri in range(after_row - 1, min(after_row + max_search, len(rows))):
+        row = rows[ri]
+        num_count = 0
+        for ci in range(data_col_start - 1, min(data_col_start + 10, len(row))):
+            val = row[ci].value
+            if val is not None and _safe_num(val) is not None:
+                num_count += 1
+        if num_count >= 2:
+            return None, ri + 1  # no header row, data starts here
+
+    return None, None
+
+
 def parse_excel(file_or_path, sheet_name: str = "Raw data") -> ParsedFile:
     """
     Parse a vendor CPK Excel file and return structured data.
+
+    Auto-detects sheet layout by scanning for "Dim. No." marker cells.
+    Works with any sheet name and column/row arrangement.
 
     Parameters
     ----------
@@ -101,7 +188,8 @@ def parse_excel(file_or_path, sheet_name: str = "Raw data") -> ParsedFile:
         Path to an .xlsx file, or an in-memory file object (e.g. from
         Streamlit's file_uploader).
     sheet_name : str
-        Which sheet to read: "Data Input" or "Raw data".
+        Hint for which sheet to read. If the exact name or known aliases
+        are not found, all sheets are scanned for CPK data layout.
 
     Returns
     -------
@@ -117,88 +205,221 @@ def parse_excel(file_or_path, sheet_name: str = "Raw data") -> ParsedFile:
         wb = openpyxl.load_workbook(file_or_path, data_only=True, read_only=True)
         filename = getattr(file_or_path, "name", "uploaded_file")
 
-    if sheet_name not in wb.sheetnames:
+    # ----- Auto-detect which sheet(s) contain CPK data -----
+    # Priority: try requested sheet / aliases first, then scan all sheets.
+    _SHEET_ALIASES = {
+        "Raw data": ["Raw data", "Raw Data", "raw data", "PP data", "PP"],
+        "Data Input": ["Data Input", "data input", "Data input"],
+    }
+    candidate_sheets = []
+    # 1. Exact match
+    if sheet_name in wb.sheetnames:
+        candidate_sheets.append(sheet_name)
+    # 2. Aliases
+    for alias in _SHEET_ALIASES.get(sheet_name, []):
+        if alias in wb.sheetnames and alias not in candidate_sheets:
+            candidate_sheets.append(alias)
+    # 3. Case-insensitive match
+    lower_target = sheet_name.lower()
+    for s in wb.sheetnames:
+        if s.lower() == lower_target and s not in candidate_sheets:
+            candidate_sheets.append(s)
+    # 4. ALL remaining sheets (auto-detect mode)
+    for s in wb.sheetnames:
+        if s not in candidate_sheets:
+            candidate_sheets.append(s)
+
+    # Try each candidate; pick first sheet that has "Dim. No." marker
+    matched_sheet = None
+    sheet_rows = None
+    dim_no_row = None
+    dim_no_col = None
+    for sn in candidate_sheets:
+        ws = wb[sn]
+        rows = list(ws.rows)
+        r, c = _find_dim_no_cell(rows)
+        if r is not None:
+            matched_sheet = sn
+            sheet_rows = rows
+            dim_no_row = r
+            dim_no_col = c
+            break
+
+    if matched_sheet is None:
         available = ", ".join(wb.sheetnames)
+        wb.close()
         raise ValueError(
-            f"Sheet '{sheet_name}' not found. Available sheets: {available}"
+            f"No CPK data found in any sheet. Available sheets: {available}"
         )
 
-    ws = wb[sheet_name]
+    label_col = dim_no_col       # column containing row labels
+    data_col_start = label_col + 1  # first column of dimension data
 
-    # We need random-access rows, so materialise the sheet into a list.
-    # read_only worksheets yield rows lazily; convert to list of tuples.
-    rows = list(ws.rows)  # list of tuples of Cell objects
+    result = ParsedFile(filename=filename, sheet_name=matched_sheet)
 
-    result = ParsedFile(filename=filename, sheet_name=sheet_name)
-
-    # ------------------------------------------------------------------
-    # 1. File-level metadata (rows 1-3, column L=12, M=13)
-    # ------------------------------------------------------------------
+    # Convenience cell accessor
     def _cell(r, c):
         """Get cell value; r and c are 1-based."""
-        if r - 1 < len(rows):
-            row = rows[r - 1]
+        if r - 1 < len(sheet_rows):
+            row = sheet_rows[r - 1]
             if c - 1 < len(row):
                 return row[c - 1].value
         return None
 
-    result.part_number = _safe_str(_cell(2, 13))      # Row 2, Col M
-    result.revision = _safe_str(_cell(2, 16))          # Row 2, Col P
-    result.part_description = _safe_str(_cell(3, 13))  # Row 3, Col M
+    # ------------------------------------------------------------------
+    # 1. File-level metadata (scan near top for "Part Number", etc.)
+    # ------------------------------------------------------------------
+    for ri in range(min(5, len(sheet_rows))):
+        row = sheet_rows[ri]
+        for ci, cell in enumerate(row):
+            val = cell.value
+            if val is None:
+                continue
+            s = str(val).strip().lower()
+            if "part number" in s and ci + 1 < len(row):
+                result.part_number = _safe_str(row[ci + 1].value)
+            elif "revision" in s and ci + 1 < len(row):
+                result.revision = _safe_str(row[ci + 1].value)
+            elif "part description" in s and ci + 1 < len(row):
+                result.part_description = _safe_str(row[ci + 1].value)
 
     # ------------------------------------------------------------------
-    # 2. Dimension metadata (rows 6-20, columns 13+)
+    # 2. Detect metadata row positions by scanning label column
     # ------------------------------------------------------------------
-    max_col = len(rows[5]) if len(rows) >= 6 else 0  # row 6 (index 5)
+    label_rows = _scan_label_rows(sheet_rows, label_col, dim_no_row, dim_no_row + 40)
 
-    # Collect per-column info first, then group by dim_no
-    col_dim_no = {}      # col_idx -> dim_no string
-    col_desc = {}        # col_idx -> description
-    col_type = {}        # col_idx -> dimension type
-    col_point = {}       # col_idx -> point number
-    col_nominal = {}     # col_idx -> nominal
-    col_tol_max = {}     # col_idx -> tol max
-    col_tol_min = {}     # col_idx -> tol min
-    col_usl = {}         # col_idx -> USL
-    col_lsl = {}         # col_idx -> LSL
+    desc_row = label_rows.get("description")
+    type_row = label_rows.get("dim_type")
+    point_row = label_rows.get("point_number")
+    nominal_row = label_rows.get("nominal")
+    tol_max_row = label_rows.get("tol_max")
+    tol_min_row = label_rows.get("tol_min")
+    usl_row = label_rows.get("usl")
+    lsl_row = label_rows.get("lsl")
 
-    for ci in range(13, max_col + 1):  # 1-based col 13 onward
-        dim_no = _safe_str(_cell(6, ci))
-        if not dim_no:
+    # ------------------------------------------------------------------
+    # 3. Dimension metadata (scan data columns from data_col_start)
+    # ------------------------------------------------------------------
+    max_col = len(sheet_rows[dim_no_row - 1]) if dim_no_row - 1 < len(sheet_rows) else 0
+
+    col_dim_no = {}
+    col_desc = {}
+    col_type = {}
+    col_point = {}
+    col_nominal = {}
+    col_tol_max = {}
+    col_tol_min = {}
+    col_usl = {}
+    col_lsl = {}
+
+    for ci in range(data_col_start, max_col + 1):  # 1-based
+        raw_val = _safe_str(_cell(dim_no_row, ci))
+        if not raw_val:
             continue
+        # Some files embed description in the dim_no cell (e.g. "SPC_G\nCombo Flex flatness")
+        if "\n" in raw_val:
+            parts = raw_val.split("\n", 1)
+            dim_no = parts[0].strip()
+            embedded_desc = parts[1].strip()
+        else:
+            dim_no = raw_val
+            embedded_desc = ""
         col_dim_no[ci] = dim_no
-        col_desc[ci] = _safe_str(_cell(7, ci))
-        col_type[ci] = _safe_str(_cell(8, ci))
-        col_point[ci] = _safe_str(_cell(9, ci))
-        col_nominal[ci] = _safe_num(_cell(14, ci))
-        col_tol_max[ci] = _safe_num(_cell(15, ci))
-        col_tol_min[ci] = _safe_num(_cell(16, ci))
-        col_usl[ci] = _safe_num(_cell(19, ci))
-        col_lsl[ci] = _safe_num(_cell(20, ci))
+        col_desc[ci] = _safe_str(_cell(desc_row, ci)) if desc_row else embedded_desc
+        col_type[ci] = _safe_str(_cell(type_row, ci)) if type_row else ""
+        col_point[ci] = _safe_str(_cell(point_row, ci)) if point_row else ""
+        col_nominal[ci] = _safe_num(_cell(nominal_row, ci)) if nominal_row else None
+        col_tol_max[ci] = _safe_num(_cell(tol_max_row, ci)) if tol_max_row else None
+        col_tol_min[ci] = _safe_num(_cell(tol_min_row, ci)) if tol_min_row else None
+        col_usl[ci] = _safe_num(_cell(usl_row, ci)) if usl_row else None
+        col_lsl[ci] = _safe_num(_cell(lsl_row, ci)) if lsl_row else None
 
     # Group by dim_no preserving order
-    dim_groups = OrderedDict()  # dim_no -> list of col indices
+    dim_groups = OrderedDict()
     for ci, dno in col_dim_no.items():
         dim_groups.setdefault(dno, []).append(ci)
 
-    for dno, cols in dim_groups.items():
-        desc = col_desc.get(cols[0], "")
+    # ------------------------------------------------------------------
+    # 3b. Merge numbered sub-dimensions (compact format)
+    #     e.g. SPC_HG, SPC_HG.01, SPC_HG.02 ... -> single "SPC_HG" group
+    #     Only applies when individual dims are single-column with no
+    #     point numbers (i.e. the compact format pattern).
+    # ------------------------------------------------------------------
+    merged_groups = OrderedDict()  # parent_name -> list of col indices
+    merged_descs = {}              # parent_name -> description
+    consumed = set()               # dim_nos already merged
+
+    # First pass: find explicit parents with .NNN children
+    for dno in list(dim_groups.keys()):
+        if dno in consumed:
+            continue
+        children = []
+        for other in dim_groups:
+            if other == dno:
+                continue
+            if re.match(re.escape(dno) + r'\.\d+$', other):
+                children.append(other)
+        if children:
+            all_cols = list(dim_groups[dno])
+            for child in children:
+                all_cols.extend(dim_groups[child])
+                consumed.add(child)
+            merged_groups[dno] = all_cols
+            merged_descs[dno] = col_desc.get(dim_groups[dno][0], "")
+            consumed.add(dno)
+
+    # Second pass: group orphan .NNN siblings with no parent
+    # e.g. SPC_1.001, SPC_1.002, ... (no bare SPC_1 exists)
+    orphans = OrderedDict()  # prefix -> list of (dno, cols)
+    for dno in list(dim_groups.keys()):
+        if dno in consumed:
+            continue
+        m = re.match(r'^(.+)\.\d+$', dno)
+        if m:
+            prefix = m.group(1)
+            orphans.setdefault(prefix, []).append(dno)
+        else:
+            # Not a numbered dim, keep standalone
+            merged_groups[dno] = list(dim_groups[dno])
+            consumed.add(dno)
+
+    for prefix, siblings in orphans.items():
+        if len(siblings) >= 2:
+            # Merge all siblings under the prefix name
+            all_cols = []
+            for sib in siblings:
+                all_cols.extend(dim_groups[sib])
+                consumed.add(sib)
+            merged_groups[prefix] = all_cols
+            merged_descs[prefix] = col_desc.get(dim_groups[siblings[0]][0], "")
+        else:
+            # Single orphan, keep as-is
+            dno = siblings[0]
+            merged_groups[dno] = list(dim_groups[dno])
+            consumed.add(dno)
+
+    for dno, cols in merged_groups.items():
+        desc = col_desc.get(cols[0], "") if dno not in merged_descs else merged_descs[dno]
         dtype = col_type.get(cols[0], "")
 
-        # Build readable column labels: "SPC_AA_C39", "SPC_AA_C43", etc.
         col_labels = []
-        for ci in cols:
+        point_numbers = []
+        for idx, ci in enumerate(cols):
             pt = col_point.get(ci, "")
             if pt:
+                point_numbers.append(pt)
                 col_labels.append(f"{dno}_{pt}")
             else:
-                col_labels.append(f"{dno}_col{ci}")
+                # Synthesize point label: P0, P1, P2, ...
+                syn_pt = f"P{idx}"
+                point_numbers.append(syn_pt)
+                col_labels.append(f"{dno}_{syn_pt}")
 
         result.dimensions[dno] = DimensionMeta(
             dim_no=dno,
             description=desc,
             dim_type=dtype,
-            point_numbers=[col_point.get(ci, "") for ci in cols],
+            point_numbers=point_numbers,
             nominal=[col_nominal.get(ci) for ci in cols],
             tol_max=[col_tol_max.get(ci) for ci in cols],
             tol_min=[col_tol_min.get(ci) for ci in cols],
@@ -209,44 +430,70 @@ def parse_excel(file_or_path, sheet_name: str = "Raw data") -> ParsedFile:
         )
 
     # ------------------------------------------------------------------
-    # 3. Data header row (row 40) -- dynamic column mapping
+    # 4. Find data start row (auto-detect header + data)
     # ------------------------------------------------------------------
-    header_row_idx = 40  # 1-based
+    # Search after the last known metadata row
+    search_after = max(
+        dim_no_row + 10,
+        *(v for v in [usl_row, lsl_row, nominal_row, tol_max_row, tol_min_row] if v),
+    )
+    header_row_idx, data_start_row = _find_data_start(
+        sheet_rows, label_col, data_col_start, search_after
+    )
 
-    # Build mapping: header_name -> col_index (1-based)
-    header_map = {}  # normalised_name -> col_index
-    header_raw = {}  # col_index -> raw_name
-    if header_row_idx - 1 < len(rows):
-        hrow = rows[header_row_idx - 1]
+    if data_start_row is None:
+        # No data rows found; return empty result
+        result.data = pd.DataFrame()
+        wb.close()
+        return result
+
+    # ------------------------------------------------------------------
+    # 5. Build metadata column mapping from the header row
+    # ------------------------------------------------------------------
+    meta_col_map = OrderedDict()
+    if header_row_idx is not None and header_row_idx - 1 < len(sheet_rows):
+        hrow = sheet_rows[header_row_idx - 1]
+        header_map = {}
         for ci, cell in enumerate(hrow, 1):
             val = _safe_str(cell.value).lower()
             if val:
                 header_map[val] = ci
-                header_raw[ci] = _safe_str(cell.value)
 
-    # Determine which metadata columns exist
-    meta_col_map = OrderedDict()  # display_name -> col_index
-    for name in ["Build", "Shipment Date", "Color", "Config",
-                  "Vendor Serial Number", "Fabric thickness",
-                  "2D Barcode", "1D Barcode", "RM Coil", "Raw material",
-                  "Start Point"]:
-        # Try exact match first, then case-insensitive
-        ci = header_map.get(name.lower())
-        if ci is not None:
-            meta_col_map[name] = ci
+        for name in ["Build", "Shipment Date", "Color", "Config",
+                      "Vendor Serial Number", "Fabric thickness",
+                      "2D Barcode", "1D Barcode", "RM Coil", "Raw material",
+                      "Start Point", "SN", "Process"]:
+            ci = header_map.get(name.lower())
+            if ci is not None:
+                meta_col_map[name] = ci
+    else:
+        # No header row -- check if there's an SN / serial column
+        # (compact format has "SN" at label_col-1, serial numbers at label_col-1)
+        sn_row_label = label_rows.get("sn")
+        if sn_row_label is not None:
+            # The SN column is typically one col left of the label col
+            sn_col_idx = label_col - 1 if label_col > 1 else 1
+            meta_col_map["SN"] = sn_col_idx
+        process_row_label = label_rows.get("process")
+        if process_row_label is not None:
+            meta_col_map["Process"] = 1  # typically col A
 
     result.meta_columns = list(meta_col_map.keys())
 
     # ------------------------------------------------------------------
-    # 4. Measurement data (rows 41+)
+    # 6. Measurement data (from data_start_row onward)
     # ------------------------------------------------------------------
-    data_start_row = 41  # 1-based
+    # Determine which column to use for the "is row populated?" check
+    # Prefer "Start Point" or "SN", fallback to first dimension column
+    check_col = None
+    if "Start Point" in meta_col_map:
+        check_col = meta_col_map["Start Point"]
+    elif "SN" in meta_col_map:
+        check_col = meta_col_map["SN"]
 
     records = []
-    for ri in range(data_start_row - 1, len(rows)):
-        row = rows[ri]
-
-        # Build record dict
+    for ri in range(data_start_row - 1, len(sheet_rows)):
+        row = sheet_rows[ri]
         rec = {}
 
         # Metadata columns
@@ -256,12 +503,28 @@ def parse_excel(file_or_path, sheet_name: str = "Raw data") -> ParsedFile:
             else:
                 rec[name] = None
 
-        # Skip rows that look empty (no Start Point value)
-        sp = rec.get("Start Point")
-        if sp is None:
-            continue
+        # Skip empty rows: check sentinel column or look for numeric data
+        if check_col is not None:
+            if check_col - 1 < len(row):
+                sentinel = row[check_col - 1].value
+            else:
+                sentinel = None
+            if sentinel is None:
+                continue
+        else:
+            # No sentinel: check if row has any numeric data in dim columns
+            has_data = False
+            for dno, dmeta in result.dimensions.items():
+                for ci_d in dmeta.col_indices[:3]:
+                    if ci_d - 1 < len(row) and _safe_num(row[ci_d - 1].value) is not None:
+                        has_data = True
+                        break
+                if has_data:
+                    break
+            if not has_data:
+                continue
 
-        # Measurement columns (all dimension columns)
+        # Measurement columns
         for dno, dmeta in result.dimensions.items():
             for ci, label in zip(dmeta.col_indices, dmeta.col_labels):
                 if ci - 1 < len(row):
@@ -280,21 +543,28 @@ def parse_excel(file_or_path, sheet_name: str = "Raw data") -> ParsedFile:
         )
 
     # ------------------------------------------------------------------
-    # 5. Detect factory / site code from Vendor Serial Number column
+    # 7. Detect factory / site code
     # ------------------------------------------------------------------
     if "Vendor Serial Number" in result.data.columns:
         vsn_vals = result.data["Vendor Serial Number"].dropna().astype(str)
         if len(vsn_vals) > 0:
-            # The VSN column typically contains a short factory code
-            # (e.g. "FX", "TY") repeated for all rows in a file
             most_common = vsn_vals.mode()
             if len(most_common) > 0:
                 result.factory = str(most_common.iloc[0]).strip()
 
+    # Fallback: extract factory prefix from SN column (e.g. "FJS..." -> "FJS")
+    if not result.factory and "SN" in result.data.columns:
+        sn_vals = result.data["SN"].dropna().astype(str)
+        if len(sn_vals) > 0:
+            first_sn = sn_vals.iloc[0]
+            m = re.match(r'^([A-Z]{2,4})', first_sn)
+            if m:
+                result.factory = m.group(1)
+
     # Fallback: try to extract factory from filename (e.g. "FX_K116_...")
     if not result.factory:
         name_parts = filename.split("_")
-        if name_parts:
+        if name_parts and re.match(r'^[A-Z]{2,4}$', name_parts[0]):
             result.factory = name_parts[0]
 
     wb.close()
@@ -310,39 +580,49 @@ def detect_dimension_groups(dimensions: OrderedDict) -> Dict[str, List[str]]:
     Auto-detect dimension groups by analysing description keywords.
 
     Returns a dict of group_display_name -> list of dim_no strings.
-    E.g. {"Z-Straightness: SPC_A / SPC_C / SPC_D / SPC_FF": ["SPC_A","SPC_C","SPC_D","SPC_FF"]}
-
+    Groups dimensions that share a common keyword in their description.
+    Dimensions without a matching keyword are placed in individual groups.
     Also includes an "All dimensions" pseudo-group.
     """
     # Build keyword -> list of dim_nos mapping
     keyword_map: Dict[str, List[Tuple[str, str]]] = {}  # keyword -> [(dim_no, description)]
+    ungrouped: List[Tuple[str, str]] = []  # dims with no keyword match
 
     for dno, dmeta in dimensions.items():
         desc = dmeta.description.lower().strip()
         if not desc:
+            ungrouped.append((dno, ""))
             continue
 
-        # Extract a grouping keyword from the description.
-        # Strategy: look for common patterns like "z straightness", "flatness",
-        # "overall length", "half width", "half length", "height", etc.
         keyword = _extract_group_keyword(desc)
         if keyword:
             keyword_map.setdefault(keyword, []).append((dno, dmeta.description))
+        else:
+            ungrouped.append((dno, dmeta.description))
 
     groups: Dict[str, List[str]] = OrderedDict()
 
+    # Keyword-matched groups (2+ dimensions sharing a keyword)
     for keyword, dim_list in keyword_map.items():
-        if len(dim_list) < 2:
-            # Only create groups with 2+ dimensions
-            continue
+        if len(dim_list) >= 2:
+            dim_nos = [d[0] for d in dim_list]
+            dim_labels = " / ".join(dim_nos)
+            display_keyword = keyword.replace("_", " ").title()
+            group_label = f"{display_keyword}: {dim_labels}"
+            groups[group_label] = dim_nos
+        else:
+            # Single-member keyword group -> treat as individual
+            ungrouped.extend(dim_list)
 
-        dim_nos = [d[0] for d in dim_list]
-        # Build display label
-        dim_labels = " / ".join(dim_nos)
-        # Capitalize keyword for display
-        display_keyword = keyword.replace("_", " ").title()
-        group_label = f"{display_keyword}: {dim_labels}"
-        groups[group_label] = dim_nos
+    # Individual dimension entries
+    for dno, desc in ungrouped:
+        label = f"{dno} - {desc}" if desc else dno
+        groups[label] = [dno]
+
+    # "All dimensions" pseudo-group
+    if len(dimensions) > 1:
+        all_dim_nos = list(dimensions.keys())
+        groups["All dimensions"] = all_dim_nos
 
     return groups
 

@@ -328,12 +328,57 @@ def build_combined_chart(
         factory_sections.setdefault(factory, []).append((center_x, build))
 
     xref = "x"
+    # Compute x-ranges per factory group for full-width header bands
+    factory_x_ranges = OrderedDict()
     for factory, builds in factory_sections.items():
-        factory_center = sum(cx for cx, _ in builds) / len(builds)
+        # Find the min/max x from all sections belonging to this factory
+        all_sec_labels = []
+        for center_x, sec_label in section_centers:
+            parts = sec_label.split(None, 1)
+            fac = parts[0] if parts else sec_label
+            if fac == factory:
+                all_sec_labels.append(sec_label)
+        if all_sec_labels:
+            x_min = min(section_x_ranges[sl][0] for sl in all_sec_labels)
+            x_max = max(section_x_ranges[sl][1] for sl in all_sec_labels)
+            factory_x_ranges[factory] = (x_min, x_max)
+
+    # Total x data range for converting to paper coordinates
+    total_x_min = min(v[0] for v in section_x_ranges.values()) - 0.5
+    total_x_max = max(v[1] for v in section_x_ranges.values()) - 0.5
+    total_x_span = total_x_max - total_x_min if total_x_max > total_x_min else 1
+
+    def x_to_paper(x_val):
+        return (x_val - total_x_min) / total_x_span
+
+    header_shapes = []
+    for factory, (x_min, x_max) in factory_x_ranges.items():
+        # Full-width background band in paper coordinates
+        p_x0 = x_to_paper(x_min - 0.5)
+        p_x1 = x_to_paper(x_max - 0.5)
+        header_shapes.append(dict(
+            type="rect",
+            xref="paper", yref="paper",
+            x0=p_x0, x1=p_x1,
+            y0=1.01, y1=1.07,
+            fillcolor="rgba(226, 232, 240, 0.85)",
+            line=dict(color="rgba(148, 163, 184, 0.6)", width=1),
+            layer="above",
+        ))
+
+    for factory, builds in factory_sections.items():
+        # Use midpoint of the header band in paper coordinates for centering
+        if factory in factory_x_ranges:
+            x_min, x_max = factory_x_ranges[factory]
+            factory_center = (x_to_paper(x_min - 0.5) + x_to_paper(x_max - 0.5)) / 2
+        else:
+            factory_center = sum(cx for cx, _ in builds) / len(builds)
+            factory_center = x_to_paper(factory_center)
         annotations.append(dict(
-            x=factory_center, y=1.08, xref=xref, yref="paper",
+            x=factory_center, y=1.04, xref="paper", yref="paper",
             text=f"<b>{factory}</b>", showarrow=False,
             font=dict(size=13, color="#1E293B"),
+            xanchor="center",
         ))
         for cx, build_label in builds:
             if build_label:
@@ -366,7 +411,7 @@ def build_combined_chart(
         desc = dmeta.description if dmeta else ""
         title_text = f"{dno}, {desc}" if desc else dno
 
-    subtitle = " + ".join(section_by_fields) if section_by_fields else ""
+    subtitle = ""  # Don't show section-by field names as subtitle
     y_title = "Deviation from Nominal" if deviation_mode else ""
 
     tick_step = max(1, len(all_tick_vals) // 80)
@@ -387,13 +432,14 @@ def build_combined_chart(
             font=dict(size=15), x=0.5, xanchor="center",
         ),
         height=chart_height,
-        margin=dict(l=50, r=120, t=100, b=80),
+        margin=dict(l=50, r=120, t=120, b=80),
         legend=dict(
             title=dict(text=color_by if color_by != "None" else ""),
             orientation="v", yanchor="top", y=1, xanchor="left", x=1.02,
             font=dict(size=11), bgcolor="rgba(255,255,255,0.8)",
         ),
         annotations=annotations,
+        shapes=list(fig.layout.shapes or []) + header_shapes,
         hovermode="closest",
         template="plotly_white",
     )

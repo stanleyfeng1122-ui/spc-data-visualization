@@ -15,6 +15,7 @@ Chart model (combined profile view):
 """
 
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
@@ -24,6 +25,7 @@ from scipy import stats as scipy_stats
 
 from spc_parser import (
     parse_excel,
+    parse_excel_multi,
     detect_dimension_groups,
     get_filtered_dim_meta,
     ParsedFile,
@@ -382,45 +384,74 @@ if not uploaded_files:
     st.stop()
 
 # ---------------------------------------------------------------------------
-# Sheet selector (default = Raw data for full profiles)
+# Sheet selector – dynamically reads sheets from uploaded files
 # ---------------------------------------------------------------------------
-sheet_name = st.sidebar.selectbox(
+import openpyxl, io as _io
+
+_all_sheet_names = []
+for _uf in uploaded_files:
+    _raw = _uf.getvalue()
+    _wb = openpyxl.load_workbook(_io.BytesIO(_raw), read_only=True, data_only=True)
+    for _sn in _wb.sheetnames:
+        if _sn not in _all_sheet_names:
+            _all_sheet_names.append(_sn)
+    _wb.close()
+
+# Filter out known non-data sheets (charts, histograms)
+_NON_DATA_PREFIXES = ("BoxPlotCht", "Histo ")
+_NON_DATA_EXACT = {"Histo Pivot", "Histo Listbox", "Histo Curve"}
+_data_sheets = [s for s in _all_sheet_names
+                if s not in _NON_DATA_EXACT and not any(s.startswith(p) for p in _NON_DATA_PREFIXES)]
+
+# Add "Auto-detect" as first option — lets parse_excel_multi find data sheets automatically
+_sheet_options = ["Auto-detect"] + _data_sheets
+
+sheet_choice = st.sidebar.selectbox(
     "Sheet to analyse",
-    options=["Raw data", "Data Input"],
+    options=_sheet_options,
     index=0,
-    help="'Raw data' has full measurement profiles; 'Data Input' has summary values.",
+    help="'Auto-detect' scans all sheets for measurement data. Or pick a specific sheet.",
 )
+sheet_name = "Raw data" if sheet_choice == "Auto-detect" else sheet_choice
 
 # ---------------------------------------------------------------------------
 # Parse uploaded files (cached per file + sheet)
 # ---------------------------------------------------------------------------
 
 @st.cache_data(show_spinner="Parsing Excel files...")
-def _parse_file(file_bytes: bytes, filename: str, sheet: str) -> dict:
-    """Parse and return serialisable dict (cache-friendly)."""
+def _parse_file(file_bytes: bytes, filename: str, sheet: str) -> list:
+    """Parse and return list of serialisable dicts (cache-friendly).
+
+    Uses parse_excel_multi to handle files with multiple data sheets
+    (e.g. files without a 'Raw data' sheet that have separate sheets
+    like 'X3745DH MP', 'X3744DH MP').
+    """
     import io
     buf = io.BytesIO(file_bytes)
     buf.name = filename
-    parsed = parse_excel(buf, sheet_name=sheet)
-    return {
-        "filename": parsed.filename,
-        "sheet_name": parsed.sheet_name,
-        "part_number": parsed.part_number,
-        "part_description": parsed.part_description,
-        "revision": parsed.revision,
-        "factory": parsed.factory,
-        "dimensions": parsed.dimensions,
-        "data": parsed.data,
-        "meta_columns": parsed.meta_columns,
-    }
+    parsed_list = parse_excel_multi(buf, sheet_name=sheet)
+    results = []
+    for parsed in parsed_list:
+        results.append({
+            "filename": parsed.filename,
+            "sheet_name": parsed.sheet_name,
+            "part_number": parsed.part_number,
+            "part_description": parsed.part_description,
+            "revision": parsed.revision,
+            "factory": parsed.factory,
+            "dimensions": parsed.dimensions,
+            "data": parsed.data,
+            "meta_columns": parsed.meta_columns,
+        })
+    return results
 
 
 parsed_files = []
 for uf in uploaded_files:
     try:
         raw = uf.read()
-        result = _parse_file(raw, uf.name, sheet_name)
-        parsed_files.append(result)
+        results = _parse_file(raw, uf.name, sheet_name)
+        parsed_files.extend(results)
     except Exception as e:
         st.sidebar.error(f"Error parsing {uf.name}: {e}")
 
@@ -439,8 +470,9 @@ with st.sidebar.expander(f"Loaded Files ({len(parsed_files)})", expanded=False):
         if pf["data"] is not None and "Build" in pf["data"].columns:
             builds = ", ".join(sorted(pf["data"]["Build"].dropna().unique().astype(str)))
         factory = pf.get("factory", "?")
+        sheet_label = f" [{pf['sheet_name']}]" if pf.get('sheet_name') else ""
         st.markdown(
-            f"**{pf['filename']}**  \n"
+            f"**{pf['filename']}{sheet_label}**  \n"
             f"<small>Factory: {factory} | Part: {pf['part_number']} | Rows: {n_rows} | Builds: {builds}</small>",
             unsafe_allow_html=True,
         )
@@ -518,6 +550,28 @@ exclude_intervals = st.sidebar.checkbox(
     value=True,
     help="Hide derived interval measurements, showing only actual C-points.",
 )
+
+# ---------------------------------------------------------------------------
+# Points selector – lets the user pick which measurement points to display
+# ---------------------------------------------------------------------------
+_all_point_numbers = []
+for _dno in selected_dim_nos:
+    if _dno in all_dimensions:
+        _meta = all_dimensions[_dno]
+        _cls, _pns, _noms, _usls, _lsls = get_filtered_dim_meta(_meta, exclude_intervals=False)
+        for _pn in _pns:
+            if _pn and _pn not in _all_point_numbers:
+                _all_point_numbers.append(_pn)
+
+selected_points = st.sidebar.multiselect(
+    "Points to display",
+    options=_all_point_numbers,
+    default=_all_point_numbers,
+    help="Select which measurement points to include in the chart.",
+)
+# Empty selection is treated as "show all" for backward compatibility
+if not selected_points:
+    selected_points = None
 
 # ---------------------------------------------------------------------------
 # Chart type selector
@@ -684,6 +738,7 @@ if chart_type == "Combined Profile":
         row_by=row_by,
         custom_color_map=custom_color_map,
         custom_yrange=custom_yrange,
+        selected_points=selected_points,
     )
 elif chart_type == "Box Plot":
     fig = build_box_plot(
@@ -697,6 +752,7 @@ elif chart_type == "Box Plot":
         row_by=row_by,
         custom_color_map=custom_color_map,
         custom_yrange=custom_yrange,
+        selected_points=selected_points,
     )
 elif chart_type == "Histogram":
     fig = build_histogram(
@@ -709,6 +765,7 @@ elif chart_type == "Histogram":
         nbins=hist_nbins,
         row_by=row_by,
         custom_color_map=custom_color_map,
+        selected_points=selected_points,
     )
 
 if fig is None:
@@ -717,6 +774,65 @@ if fig is None:
 
 finalize_plotly_style(fig)
 st.plotly_chart(fig, use_container_width=True, key="main_chart")
+
+# ---------------------------------------------------------------------------
+# Click-to-highlight (JMP-style) for Combined Profile chart
+# ---------------------------------------------------------------------------
+if chart_type == "Combined Profile":
+    _highlight_js = """
+<script>
+(function() {
+    function setupClickHighlight() {
+        var plotDivs = window.parent.document.querySelectorAll('.js-plotly-plot');
+        if (plotDivs.length === 0) {
+            setTimeout(setupClickHighlight, 500);
+            return;
+        }
+        var plotDiv = plotDivs[plotDivs.length - 1];
+        if (plotDiv._clickHighlightSetup) return;
+        plotDiv._clickHighlightSetup = true;
+
+        var highlightedTrace = null;
+        var defaultOpacity = 0.45;
+        var defaultWidth = 0.7;
+        var highlightOpacity = 1.0;
+        var highlightWidth = 2.5;
+        var dimOpacity = 0.08;
+        var dimWidth = 0.4;
+
+        plotDiv.on('plotly_click', function(data) {
+            var traceIndex = data.points[0].curveNumber;
+
+            if (highlightedTrace === traceIndex) {
+                // Same trace clicked again -- reset all to default
+                Plotly.restyle(plotDiv, {'opacity': defaultOpacity, 'line.width': defaultWidth});
+                highlightedTrace = null;
+            } else {
+                // Highlight clicked trace, dim all others
+                var nTraces = plotDiv.data.length;
+                var opacities = [];
+                var widths = [];
+                for (var i = 0; i < nTraces; i++) {
+                    opacities.push(dimOpacity);
+                    widths.push(dimWidth);
+                }
+                opacities[traceIndex] = highlightOpacity;
+                widths[traceIndex] = highlightWidth;
+                Plotly.restyle(plotDiv, {'opacity': opacities, 'line.width': widths});
+                highlightedTrace = traceIndex;
+            }
+        });
+
+        plotDiv.on('plotly_doubleclick', function() {
+            Plotly.restyle(plotDiv, {'opacity': defaultOpacity, 'line.width': defaultWidth});
+            highlightedTrace = null;
+        });
+    }
+    setTimeout(setupClickHighlight, 1000);
+})();
+</script>
+"""
+    components.html(_highlight_js, height=0)
 
 # ---------------------------------------------------------------------------
 # Summary Statistics – Professional SPC Analytics

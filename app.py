@@ -102,7 +102,7 @@ html, body,
 [data-testid="column"],
 [data-testid="stMainBlockContainer"],
 .element-container, .stMarkdown,
-div[data-testid] {
+div[data-testid]:not([data-testid="stSegmentedControl"]):not([data-testid="stButtonGroup"]) {
     background-color: #FFFFFF !important;
     color: #1E293B !important;
 }
@@ -415,6 +415,37 @@ header button, [data-testid="stToolbar"] button { color: #64748B !important; }
     background-color: #FFFFFF !important;
     color: #0F172A !important;
     box-shadow: 0 1px 3px rgba(0,0,0,0.08) !important;
+}
+.stApp [data-testid="stSegmentedControl"] div {
+    background: transparent !important;
+    background-color: transparent !important;
+}
+/* Button-group (segmented control) overrides */
+[data-testid="stButtonGroup"] {
+    background: #F1F5F9 !important;
+    background-color: #F1F5F9 !important;
+    border-radius: 8px !important;
+    padding: 3px !important;
+    border: 1px solid #E2E8F0 !important;
+}
+[data-testid="stButtonGroup"] button {
+    background: transparent !important;
+    background-color: transparent !important;
+    border-radius: 6px !important;
+    border: none !important;
+    color: #64748B !important;
+    font-size: 0.82rem !important;
+    font-weight: 500 !important;
+    padding: 6px 12px !important;
+}
+.stApp [data-testid="stButtonGroup"] button {
+    background: transparent !important;
+    background-color: transparent !important;
+    color: #64748B !important;
+}
+.stApp [data-testid="stButtonGroup"] div {
+    background: transparent !important;
+    background-color: transparent !important;
 }
 </style>
 """, unsafe_allow_html=True)

@@ -241,21 +241,38 @@ div[class*="UploadedFileInfo"] {
 }
 
 /* =================================================================
-   10. DROPDOWNS / POPOVER / LISTBOX
+   10. DROPDOWNS / POPOVER / LISTBOX — force white background
    ================================================================= */
 [data-baseweb="popover"],
 [data-baseweb="popover"] > div,
+[data-baseweb="popover"] > div > div,
+[data-baseweb="popover"] > div > div > div,
+[data-baseweb="popover"] ul,
+[data-baseweb="popover"] li,
 [data-baseweb="menu"],
+[data-baseweb="menu"] > div,
 [data-baseweb="listbox"],
-[data-baseweb="popover"] ul {
+[data-baseweb="listbox"] > div,
+div[role="listbox"],
+div[role="listbox"] > div,
+div[role="listbox"] ul,
+div[role="listbox"] li {
     background: #FFFFFF !important;
-    border: 1px solid #E2E8F0 !important;
+    background-color: #FFFFFF !important;
+    border-color: #E2E8F0 !important;
 }
-[data-baseweb="menu"] *, [data-baseweb="listbox"] * { color: #1E293B !important; }
+[data-baseweb="popover"] {
+    border: 1px solid #E2E8F0 !important;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08) !important;
+}
+[data-baseweb="menu"] *, [data-baseweb="listbox"] *,
+[data-baseweb="popover"] * { color: #1E293B !important; }
 [data-baseweb="menu"] li:hover, [data-baseweb="listbox"] li:hover,
+div[role="listbox"] li:hover,
 [data-baseweb="menu"] li[aria-selected="true"],
 [data-baseweb="listbox"] li[aria-selected="true"] {
     background: #F1F5F9 !important;
+    background-color: #F1F5F9 !important;
 }
 
 /* =================================================================
@@ -343,9 +360,29 @@ footer, footer * { background: #FFFFFF !important; color: #94A3B8 !important; }
 .js-plotly-plot svg, .plot-container svg { fill: unset !important; color: unset !important; }
 
 /* =================================================================
-   17. BUTTONS
+   17. BUTTONS — outline secondary, blue primary
    ================================================================= */
-.stApp button { color: #334155 !important; }
+.stButton > button {
+    background: #FFFFFF !important;
+    color: #334155 !important;
+    border: 1px solid #CBD5E1 !important;
+    border-radius: 6px !important;
+}
+.stButton > button:hover {
+    background: #F8FAFC !important;
+    border-color: #94A3B8 !important;
+}
+[data-testid="baseButton-primary"],
+.stButton > button[kind="primary"] {
+    background: #2563EB !important;
+    color: #FFFFFF !important;
+    border: 1px solid #2563EB !important;
+}
+[data-testid="baseButton-primary"]:hover,
+.stButton > button[kind="primary"]:hover {
+    background: #1D4ED8 !important;
+    border-color: #1D4ED8 !important;
+}
 .stApp button svg { fill: #64748B !important; }
 header button, [data-testid="stToolbar"] button { color: #64748B !important; }
 
@@ -566,10 +603,10 @@ for _dno in selected_dim_nos:
 selected_points = st.sidebar.multiselect(
     "Points to display",
     options=_all_point_numbers,
-    default=_all_point_numbers,
-    help="Select which measurement points to include in the chart.",
+    default=[],
+    help="Leave empty to show all points, or pick specific points to filter.",
 )
-# Empty selection is treated as "show all" for backward compatibility
+# Empty selection means "show all"
 if not selected_points:
     selected_points = None
 

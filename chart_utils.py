@@ -342,7 +342,7 @@ def build_combined_chart(
         desc = dmeta.description if dmeta else ""
         title_text = f"{dno}, {desc}" if desc else dno
 
-    subtitle = " + ".join(section_by_fields) if section_by_fields else ""
+    subtitle = ""  # Don't show section field names (e.g. "Factory") as subtitle
     y_title = "Deviation from Nominal" if deviation_mode else ""
 
     tick_step = max(1, len(all_tick_vals) // 80)
@@ -363,7 +363,7 @@ def build_combined_chart(
             font=dict(size=15), x=0.5, xanchor="center",
         ),
         height=chart_height,
-        margin=dict(l=50, r=120, t=60, b=80),
+        margin=dict(l=50, r=120, t=120, b=80),
         legend=dict(
             title=dict(text=color_by if color_by != "None" else ""),
             orientation="v", yanchor="top", y=1, xanchor="left", x=1.02,
@@ -415,6 +415,43 @@ def build_combined_chart(
             bgcolor="rgba(255,255,255,0.7)",
         ))
     fig.update_layout(annotations=annotations)
+
+    # ----- Factory / section header bands (paper coordinates) -----
+    total_x_span = x_offset  # total x-axis data range
+    if total_x_span > 0 and len(unique_sections) > 1:
+        header_shapes = []
+        section_centers = []
+        for sec_label, (sx0, sx1) in section_x_ranges.items():
+            # Map data x-range to paper coordinates [0, 1]
+            px0 = sx0 / total_x_span
+            px1 = sx1 / total_x_span
+            center_x = (px0 + px1) / 2
+            section_centers.append((center_x, sec_label))
+            header_shapes.append(dict(
+                type="rect",
+                xref="paper", yref="paper",
+                x0=px0, x1=px1,
+                y0=1.01, y1=1.07,
+                fillcolor="#F1F5F9",
+                line=dict(color="#E2E8F0", width=1),
+                layer="above",
+            ))
+        # Merge with existing shapes (USL/LSL lines)
+        existing_shapes = list(fig.layout.shapes or [])
+        fig.update_layout(shapes=existing_shapes + header_shapes)
+
+        # Add centered section labels
+        for cx, sec_label in section_centers:
+            annotations.append(dict(
+                x=cx, y=1.04,
+                xref="paper", yref="paper",
+                text=f"<b>{sec_label}</b>",
+                showarrow=False,
+                xanchor="center",
+                yanchor="middle",
+                font=dict(size=11, color="#334155"),
+            ))
+        fig.update_layout(annotations=annotations)
 
     return fig
 

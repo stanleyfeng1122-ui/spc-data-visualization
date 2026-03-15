@@ -22,6 +22,7 @@ if _project_root not in sys.path:
 
 from spc_parser import (
     parse_excel,
+    parse_excel_multi,
     detect_dimension_groups,
     get_filtered_dim_meta,
 )
@@ -131,6 +132,26 @@ p, span, label, li, td, th, div, small, strong, a { color: #1E293B !important; }
 }
 [data-baseweb="select"] *, [data-baseweb="input"] * { color: #1E293B !important; }
 [data-baseweb="tag"] { background: #E2E8F0 !important; color: #1E293B !important; }
+[data-baseweb="popover"], [data-baseweb="popover"] > div,
+[data-baseweb="popover"] > div > div, [data-baseweb="popover"] > div > div > div,
+[data-baseweb="popover"] ul, [data-baseweb="popover"] li,
+[data-baseweb="menu"], [data-baseweb="menu"] > div,
+[data-baseweb="listbox"], [data-baseweb="listbox"] > div,
+div[role="listbox"], div[role="listbox"] > div,
+div[role="listbox"] ul, div[role="listbox"] li {
+    background: #FFFFFF !important; background-color: #FFFFFF !important;
+    border-color: #E2E8F0 !important;
+}
+[data-baseweb="popover"] {
+    border: 1px solid #E2E8F0 !important;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08) !important;
+}
+[data-baseweb="menu"] *, [data-baseweb="listbox"] *,
+[data-baseweb="popover"] * { color: #1E293B !important; }
+[data-baseweb="menu"] li:hover, [data-baseweb="listbox"] li:hover,
+div[role="listbox"] li:hover {
+    background: #F1F5F9 !important; background-color: #F1F5F9 !important;
+}
 [data-testid="stSegmentedControl"] {
     background: #F1F5F9 !important; border-radius: 8px !important;
     padding: 3px !important; border: 1px solid #E2E8F0 !important;
@@ -160,7 +181,17 @@ footer, footer * { background: #FFFFFF !important; color: #94A3B8 !important; }
 [data-testid="stPlotlyChart"] svg, .js-plotly-plot svg, .plot-container svg {
     fill: unset !important; color: unset !important;
 }
-.stApp button { color: #334155 !important; }
+.stButton > button {
+    background: #FFFFFF !important; color: #334155 !important;
+    border: 1px solid #CBD5E1 !important; border-radius: 6px !important;
+}
+.stButton > button:hover { background: #F8FAFC !important; border-color: #94A3B8 !important; }
+[data-testid="baseButton-primary"], .stButton > button[kind="primary"] {
+    background: #2563EB !important; color: #FFFFFF !important; border: 1px solid #2563EB !important;
+}
+[data-testid="baseButton-primary"]:hover, .stButton > button[kind="primary"]:hover {
+    background: #1D4ED8 !important; border-color: #1D4ED8 !important;
+}
 .stApp button svg { fill: #64748B !important; }
 .stApp div:not([data-testid="stPlotlyChart"] *) { background-color: transparent; }
 .stApp > div, .stApp > div > div,
@@ -178,7 +209,7 @@ footer, footer * { background: #FFFFFF !important; color: #94A3B8 !important; }
 
 @st.cache_data(show_spinner="Parsing local Excel files...")
 def load_local_files(data_dir: str, sheet: str):
-    """Scan data_dir for .xlsx files (skip temp ~$ files) and parse them."""
+    """Scan data_dir for .xlsx files (skip temp ~$ files) and parse them using multi-sheet support."""
     results = []
     xlsx_files = sorted([
         f for f in os.listdir(data_dir)
@@ -187,21 +218,45 @@ def load_local_files(data_dir: str, sheet: str):
     for fname in xlsx_files:
         fpath = os.path.join(data_dir, fname)
         try:
-            parsed = parse_excel(fpath, sheet_name=sheet)
-            results.append({
-                "filename": parsed.filename,
-                "sheet_name": parsed.sheet_name,
-                "part_number": parsed.part_number,
-                "part_description": parsed.part_description,
-                "revision": parsed.revision,
-                "factory": parsed.factory,
-                "dimensions": parsed.dimensions,
-                "data": parsed.data,
-                "meta_columns": parsed.meta_columns,
-            })
+            parsed_list = parse_excel_multi(fpath, sheet_name=sheet)
+            for parsed in parsed_list:
+                results.append({
+                    "filename": parsed.filename,
+                    "sheet_name": parsed.sheet_name,
+                    "part_number": parsed.part_number,
+                    "part_description": parsed.part_description,
+                    "revision": parsed.revision,
+                    "factory": parsed.factory,
+                    "dimensions": parsed.dimensions,
+                    "data": parsed.data,
+                    "meta_columns": parsed.meta_columns,
+                })
         except Exception as e:
             st.sidebar.error(f"Error parsing {fname}: {e}")
     return results
+
+
+def _discover_sheets(data_dir: str):
+    """Read sheet names from all .xlsx files in the directory."""
+    import openpyxl
+    all_sheets = []
+    _NON_DATA_PREFIXES = ("BoxPlotCht", "Histo ")
+    _NON_DATA_EXACT = {"Histo Pivot", "Histo Listbox", "Histo Curve"}
+    xlsx_files = sorted([
+        f for f in os.listdir(data_dir)
+        if f.endswith(".xlsx") and not f.startswith("~$")
+    ])
+    for fname in xlsx_files:
+        fpath = os.path.join(data_dir, fname)
+        try:
+            wb = openpyxl.load_workbook(fpath, read_only=True, data_only=True)
+            for sn in wb.sheetnames:
+                if sn not in all_sheets and sn not in _NON_DATA_EXACT and not any(sn.startswith(p) for p in _NON_DATA_PREFIXES):
+                    all_sheets.append(sn)
+            wb.close()
+        except Exception:
+            pass
+    return all_sheets
 
 
 # ---------------------------------------------------------------------------
@@ -210,12 +265,17 @@ def load_local_files(data_dir: str, sheet: str):
 st.sidebar.title("Quick Test")
 st.sidebar.caption("Auto-loads all .xlsx files from the project directory.")
 
-sheet_name = st.sidebar.selectbox(
+_available_sheets = _discover_sheets(_project_root)
+_sheet_options = ["Auto-detect"] + _available_sheets
+
+sheet_choice = st.sidebar.selectbox(
     "Sheet to analyse",
-    options=["Raw data", "Data Input"],
+    options=_sheet_options,
     index=0,
     key="qt_sheet",
+    help="'Auto-detect' scans all sheets for measurement data. Or pick a specific sheet.",
 )
+sheet_name = "Raw data" if sheet_choice == "Auto-detect" else sheet_choice
 
 parsed_files = load_local_files(_project_root, sheet_name)
 
@@ -285,6 +345,26 @@ if not selected_dim_nos:
 
 # Options
 exclude_intervals = st.sidebar.checkbox("Exclude interval points", value=True, key="qt_excl")
+
+# Points selector — empty = show all
+_all_point_numbers = []
+for _dno in selected_dim_nos:
+    if _dno in all_dimensions:
+        _meta = all_dimensions[_dno]
+        _cls, _pns, _noms, _usls, _lsls = get_filtered_dim_meta(_meta, exclude_intervals=False)
+        for _pn in _pns:
+            if _pn and _pn not in _all_point_numbers:
+                _all_point_numbers.append(_pn)
+
+selected_points = st.sidebar.multiselect(
+    "Points to display",
+    options=_all_point_numbers,
+    default=[],
+    help="Leave empty to show all points, or pick specific points to filter.",
+    key="qt_points",
+)
+if not selected_points:
+    selected_points = None
 
 st.sidebar.markdown("---")
 chart_type = st.sidebar.segmented_control(
@@ -390,6 +470,7 @@ if chart_type == "Combined Profile":
         y_axis_mode=y_axis_mode, exclude_intervals=exclude_intervals,
         group_label=selected_group_label, row_by=row_by,
         custom_color_map=custom_color_map, custom_yrange=custom_yrange,
+        selected_points=selected_points,
     )
 elif chart_type == "Box Plot":
     fig = build_box_plot(
@@ -397,6 +478,7 @@ elif chart_type == "Box Plot":
         color_by=color_by, y_axis_mode=y_axis_mode,
         exclude_intervals=exclude_intervals, group_label=selected_group_label,
         row_by=row_by, custom_color_map=custom_color_map, custom_yrange=custom_yrange,
+        selected_points=selected_points,
     )
 elif chart_type == "Histogram":
     fig = build_histogram(
@@ -404,6 +486,7 @@ elif chart_type == "Histogram":
         color_by=color_by, exclude_intervals=exclude_intervals,
         group_label=selected_group_label, nbins=hist_nbins,
         row_by=row_by, custom_color_map=custom_color_map,
+        selected_points=selected_points,
     )
 
 if fig is None:

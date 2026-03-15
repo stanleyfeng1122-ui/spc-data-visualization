@@ -199,6 +199,17 @@ footer, footer * { background: #FFFFFF !important; color: #94A3B8 !important; }
 [data-testid="stVerticalBlockBorderWrapper"] > div {
     background-color: #FFFFFF !important;
 }
+.stApp [data-testid="stSegmentedControl"] {
+    background: #F1F5F9 !important; background-color: #F1F5F9 !important;
+}
+.stApp [data-testid="stSegmentedControl"] button {
+    background: transparent !important; background-color: transparent !important;
+    color: #64748B !important;
+}
+.stApp [data-testid="stSegmentedControl"] button[aria-checked="true"] {
+    background: #FFFFFF !important; background-color: #FFFFFF !important;
+    color: #0F172A !important; box-shadow: 0 1px 3px rgba(0,0,0,0.08) !important;
+}
 </style>
 """, unsafe_allow_html=True)
 

@@ -397,6 +397,25 @@ header button, [data-testid="stToolbar"] button { color: #64748B !important; }
 [data-testid="stVerticalBlockBorderWrapper"] > div {
     background-color: #FFFFFF !important;
 }
+
+/* =================================================================
+   19. RE-ASSERT segmented control after catch-all
+   ================================================================= */
+.stApp [data-testid="stSegmentedControl"] {
+    background: #F1F5F9 !important;
+    background-color: #F1F5F9 !important;
+}
+.stApp [data-testid="stSegmentedControl"] button {
+    background: transparent !important;
+    background-color: transparent !important;
+    color: #64748B !important;
+}
+.stApp [data-testid="stSegmentedControl"] button[aria-checked="true"] {
+    background: #FFFFFF !important;
+    background-color: #FFFFFF !important;
+    color: #0F172A !important;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08) !important;
+}
 </style>
 """, unsafe_allow_html=True)
 

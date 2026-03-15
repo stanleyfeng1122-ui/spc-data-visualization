@@ -600,15 +600,19 @@ for _dno in selected_dim_nos:
             if _pn and _pn not in _all_point_numbers:
                 _all_point_numbers.append(_pn)
 
-selected_points = st.sidebar.multiselect(
-    "Points to display",
+excluded_points = st.sidebar.multiselect(
+    "Points to exclude",
     options=_all_point_numbers,
     default=[],
-    help="Leave empty to show all points, or pick specific points to filter.",
+    help="Pick points to hide from the chart. Leave empty to show all.",
 )
-# Empty selection means "show all"
-if not selected_points:
-    selected_points = None
+# Convert exclusion list to inclusion list (None means show all)
+if excluded_points:
+    selected_points = [p for p in _all_point_numbers if p not in excluded_points]
+    if not selected_points:
+        selected_points = None  # all excluded → show nothing (will warn)
+else:
+    selected_points = None  # show all
 
 # ---------------------------------------------------------------------------
 # Chart type selector

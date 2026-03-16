@@ -102,7 +102,7 @@ html, body,
 [data-testid="column"],
 [data-testid="stMainBlockContainer"],
 .element-container, .stMarkdown,
-div[data-testid]:not([data-testid="stSegmentedControl"]):not([data-testid="stButtonGroup"]) {
+div[data-testid] {
     background-color: #FFFFFF !important;
     color: #1E293B !important;
 }
@@ -202,8 +202,21 @@ p, span, label, li, td, th, div, small, strong, a { color: #1E293B !important; }
 [data-baseweb="tag"] { background: #E2E8F0 !important; color: #1E293B !important; }
 [data-testid="stNumberInput"] input {
     background: #FFFFFF !important; color: #1E293B !important;
-    border: 1px solid #94A3B8 !important;
     border: 1px solid #CBD5E1 !important;
+}
+[data-testid="stNumberInput"] button {
+    background: #F1F5F9 !important;
+    background-color: #F1F5F9 !important;
+    border: 1px solid #CBD5E1 !important;
+    color: #334155 !important;
+}
+[data-testid="stNumberInput"] button:hover {
+    background: #E2E8F0 !important;
+    background-color: #E2E8F0 !important;
+}
+[data-testid="stNumberInput"] button svg {
+    fill: #334155 !important;
+    color: #334155 !important;
 }
 
 /* =================================================================
@@ -283,34 +296,102 @@ div[role="listbox"] li:hover,
     color: #334155 !important;
 }
 
+/* --- Checkbox box styling (fix dark/black background) --- */
+[data-testid="stCheckbox"] {
+    background-color: transparent !important;
+}
+[data-testid="stCheckbox"] label,
+[data-testid="stCheckbox"] label > span,
+[data-testid="stCheckbox"] label > div {
+    background-color: transparent !important;
+}
+/* The visual checkbox square — unchecked state */
+[data-testid="stCheckbox"] [role="checkbox"],
+[data-testid="stCheckbox"] span[data-baseweb="checkbox"],
+[data-testid="stCheckbox"] span[data-baseweb="checkbox"] > span,
+[data-testid="stCheckbox"] span[data-baseweb="checkbox"] > div,
+[data-testid="stCheckbox"] label > span:first-child,
+[data-testid="stCheckbox"] label > span:first-child > span,
+[data-testid="stCheckbox"] label > div:first-child,
+[data-testid="stCheckbox"] label > div:first-child > div,
+[data-testid="stCheckbox"] label > div:first-child > span {
+    background-color: #FFFFFF !important;
+    background: #FFFFFF !important;
+    border-color: #CBD5E1 !important;
+    border-radius: 4px !important;
+}
+/* Checked state — blue background */
+[data-testid="stCheckbox"] [role="checkbox"][aria-checked="true"],
+[data-testid="stCheckbox"] span[data-baseweb="checkbox"][aria-checked="true"],
+[data-testid="stCheckbox"] input:checked + span,
+[data-testid="stCheckbox"] input:checked + div,
+[data-testid="stCheckbox"] input:checked ~ span,
+[data-testid="stCheckbox"] input:checked ~ div,
+[data-testid="stCheckbox"] label:has(input:checked) > span:first-child,
+[data-testid="stCheckbox"] label:has(input:checked) > span:first-child > span,
+[data-testid="stCheckbox"] label:has(input:checked) > div:first-child,
+[data-testid="stCheckbox"] label:has(input:checked) > div:first-child > div,
+[data-testid="stCheckbox"] label:has(input:checked) > div:first-child > span {
+    background-color: #2563EB !important;
+    background: #2563EB !important;
+    border-color: #2563EB !important;
+}
+/* Checkmark SVG icon — white */
+[data-testid="stCheckbox"] svg,
+[data-testid="stCheckbox"] [role="checkbox"] svg,
+[data-testid="stCheckbox"] span[data-baseweb="checkbox"] svg {
+    fill: #FFFFFF !important;
+    color: #FFFFFF !important;
+    stroke: #FFFFFF !important;
+}
+/* Hover state */
+[data-testid="stCheckbox"] [role="checkbox"]:hover,
+[data-testid="stCheckbox"] span[data-baseweb="checkbox"]:hover {
+    border-color: #94A3B8 !important;
+}
+/* Label text */
+[data-testid="stCheckbox"] label p,
+[data-testid="stCheckbox"] label span {
+    color: #334155 !important;
+}
+
 /* =================================================================
-   11b. SEGMENTED CONTROL (pill toggle)
+   11b. RADIO BUTTON — horizontal pill style (chart type selector)
    ================================================================= */
-[data-testid="stSegmentedControl"] {
+[data-testid="stRadio"] > div {
+    flex-direction: row !important;
+    gap: 0 !important;
     background: #F1F5F9 !important;
     border-radius: 8px !important;
     padding: 3px !important;
     border: 1px solid #E2E8F0 !important;
+    display: inline-flex !important;
 }
-[data-testid="stSegmentedControl"] button {
-    border-radius: 6px !important;
-    border: none !important;
+[data-testid="stRadio"] > div > label {
     background: transparent !important;
-    color: #64748B !important;
+    border-radius: 6px !important;
+    padding: 6px 14px !important;
+    margin: 0 !important;
+    cursor: pointer !important;
     font-size: 0.82rem !important;
     font-weight: 500 !important;
-    padding: 6px 12px !important;
+    color: #64748B !important;
     transition: all 0.15s ease !important;
+    white-space: nowrap !important;
 }
-[data-testid="stSegmentedControl"] button[aria-checked="true"] {
+[data-testid="stRadio"] > div > label:has(input:checked) {
     background: #FFFFFF !important;
     color: #0F172A !important;
     font-weight: 600 !important;
     box-shadow: 0 1px 3px rgba(0,0,0,0.08) !important;
 }
-[data-testid="stSegmentedControl"] button:hover:not([aria-checked="true"]) {
-    color: #334155 !important;
+[data-testid="stRadio"] > div > label:hover:not(:has(input:checked)) {
     background: rgba(255,255,255,0.5) !important;
+    color: #334155 !important;
+}
+/* Hide the actual radio circle */
+[data-testid="stRadio"] > div > label > div:first-child {
+    display: none !important;
 }
 
 /* =================================================================
@@ -358,6 +439,8 @@ footer, footer * { background: #FFFFFF !important; color: #94A3B8 !important; }
 /* Don't override Plotly chart SVG colors */
 [data-testid="stPlotlyChart"] svg,
 .js-plotly-plot svg, .plot-container svg { fill: unset !important; color: unset !important; }
+/* Don't override checkbox checkmark SVG */
+.stApp [data-testid="stCheckbox"] svg { fill: #FFFFFF !important; color: #FFFFFF !important; stroke: #FFFFFF !important; }
 
 /* =================================================================
    17. BUTTONS — outline secondary, blue primary
@@ -399,53 +482,19 @@ header button, [data-testid="stToolbar"] button { color: #64748B !important; }
 }
 
 /* =================================================================
-   19. RE-ASSERT segmented control after catch-all
+   19. RE-ASSERT radio pill style after catch-all
    ================================================================= */
-.stApp [data-testid="stSegmentedControl"] {
+.stApp [data-testid="stRadio"] > div {
     background: #F1F5F9 !important;
     background-color: #F1F5F9 !important;
 }
-.stApp [data-testid="stSegmentedControl"] button {
+.stApp [data-testid="stRadio"] > div > label {
     background: transparent !important;
     background-color: transparent !important;
-    color: #64748B !important;
 }
-.stApp [data-testid="stSegmentedControl"] button[aria-checked="true"] {
+.stApp [data-testid="stRadio"] > div > label:has(input:checked) {
     background: #FFFFFF !important;
     background-color: #FFFFFF !important;
-    color: #0F172A !important;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.08) !important;
-}
-.stApp [data-testid="stSegmentedControl"] div {
-    background: transparent !important;
-    background-color: transparent !important;
-}
-/* Button-group (segmented control) overrides */
-[data-testid="stButtonGroup"] {
-    background: #F1F5F9 !important;
-    background-color: #F1F5F9 !important;
-    border-radius: 8px !important;
-    padding: 3px !important;
-    border: 1px solid #E2E8F0 !important;
-}
-[data-testid="stButtonGroup"] button {
-    background: transparent !important;
-    background-color: transparent !important;
-    border-radius: 6px !important;
-    border: none !important;
-    color: #64748B !important;
-    font-size: 0.82rem !important;
-    font-weight: 500 !important;
-    padding: 6px 12px !important;
-}
-.stApp [data-testid="stButtonGroup"] button {
-    background: transparent !important;
-    background-color: transparent !important;
-    color: #64748B !important;
-}
-.stApp [data-testid="stButtonGroup"] div {
-    background: transparent !important;
-    background-color: transparent !important;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -668,14 +717,12 @@ else:
 # Chart type selector
 # ---------------------------------------------------------------------------
 st.sidebar.markdown("---")
-chart_type = st.sidebar.segmented_control(
+chart_type = st.sidebar.radio(
     "Chart type",
     options=["Combined Profile", "Box Plot", "Histogram"],
-    default="Combined Profile",
-    selection_mode="single",
+    index=0,
+    horizontal=True,
 )
-if chart_type is None:
-    chart_type = "Combined Profile"
 
 # ---------------------------------------------------------------------------
 # Axis and grouping controls

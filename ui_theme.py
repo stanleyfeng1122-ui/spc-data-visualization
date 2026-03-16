@@ -148,10 +148,14 @@ section[data-testid="stSidebar"] h3 {{
     margin-top: 0.5rem !important;
     margin-bottom: 0.25rem !important;
 }}
-section[data-testid="stSidebar"] label {{
+section[data-testid="stSidebar"] label,
+section[data-testid="stSidebar"] [data-testid="stWidgetLabel"],
+section[data-testid="stSidebar"] [data-testid="stWidgetLabel"] p,
+section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p {{
     font-size: 0.78rem !important;
     font-weight: 500 !important;
     color: {TEXT_SECONDARY} !important;
+    font-family: {FONT_BODY} !important;
 }}
 section[data-testid="stSidebar"] p,
 section[data-testid="stSidebar"] span,
@@ -336,9 +340,16 @@ div[role="listbox"] li:hover,
     border-color: {TEXT_MUTED} !important;
 }}
 [data-testid="stCheckbox"] label p,
-[data-testid="stCheckbox"] label span {{
+[data-testid="stCheckbox"] label span,
+[data-testid="stCheckbox"] [data-testid="stWidgetLabel"],
+[data-testid="stCheckbox"] [data-testid="stWidgetLabel"] p,
+[data-testid="stCheckbox"] [data-testid="stMarkdownContainer"],
+[data-testid="stCheckbox"] [data-testid="stMarkdownContainer"] p {{
     color: {TEXT_SECONDARY} !important;
-    font-size: 0.82rem !important;
+    font-size: 0.78rem !important;
+    font-weight: 500 !important;
+    font-family: {FONT_BODY} !important;
+    line-height: 1.4 !important;
 }}
 
 /* ================================================================

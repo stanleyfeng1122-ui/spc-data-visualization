@@ -1,5 +1,5 @@
 """
-Quick Test Page -- Auto-loads local .xlsx files for fast iteration.
+Quick Test Page — Auto-loads local .xlsx files for fast iteration.
 
 No file uploading needed. All Excel files in the project directory are
 parsed automatically so you can immediately verify chart and analysis
@@ -38,263 +38,18 @@ from chart_utils import (
     nelson_rules,
     cusum_analysis,
 )
+from ui_theme import inject_theme, FONT_MONO, TEXT_PRIMARY, TEXT_SECONDARY, TEXT_MUTED, ACCENT, DANGER, SUCCESS, WARNING, WHITE, BG_SUBTLE, BORDER
 
 # ---------------------------------------------------------------------------
 # Page config
 # ---------------------------------------------------------------------------
 st.set_page_config(
-    page_title="Quick Test - SPC",
+    page_title="Quick Test — SPC",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
-# ---------------------------------------------------------------------------
-# Reuse the same global CSS from the main app
-# ---------------------------------------------------------------------------
-st.markdown("""
-<style>
-@import url('https://fonts.cdnfonts.com/css/sf-pro-display');
-html, body, div, section, main, aside, header, footer, nav,
-h1, h2, h3, h4, h5, h6, p, a, label, li, td, th,
-input, textarea, select, button, small, strong, em, code, pre,
-[data-testid="stMarkdownContainer"],
-[data-testid="stWidgetLabel"],
-[data-baseweb="select"],
-[data-baseweb="input"] {
-    font-family: 'SF Pro Display', 'SF Pro', -apple-system, BlinkMacSystemFont, sans-serif !important;
-}
-p span, label span, h1 span, h2 span, h3 span, h4 span,
-[data-testid="stMarkdownContainer"] span,
-[data-testid="stWidgetLabel"] span,
-[data-testid="stMetricLabel"] span,
-[data-testid="stMetricValue"] span {
-    font-family: 'SF Pro Display', 'SF Pro', -apple-system, BlinkMacSystemFont, sans-serif !important;
-}
-span[style*="Material Symbols"] {
-    font-family: "Material Symbols Rounded" !important;
-    color: #64748B !important;
-}
-html, body, .stApp, .main, .main > div, .block-container,
-[data-testid="stAppViewContainer"],
-[data-testid="stAppViewBlockContainer"],
-[data-testid="stVerticalBlock"],
-[data-testid="stHorizontalBlock"],
-[data-testid="column"],
-[data-testid="stMainBlockContainer"],
-.element-container, .stMarkdown, div[data-testid] {
-    background-color: #FFFFFF !important;
-    color: #1E293B !important;
-}
-header, header[data-testid="stHeader"], .stAppHeader,
-[data-testid="stHeader"], [data-testid="stToolbar"] {
-    background-color: #FFFFFF !important;
-    border-bottom: 1px solid #F1F5F9 !important;
-}
-[data-testid="stDecoration"] { display: none !important; }
-section[data-testid="stSidebar"],
-section[data-testid="stSidebar"] > div,
-section[data-testid="stSidebar"] > div > div,
-section[data-testid="stSidebar"] [data-testid="stVerticalBlock"],
-section[data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"],
-section[data-testid="stSidebar"] .element-container {
-    background-color: #F8FAFC !important;
-}
-section[data-testid="stSidebar"] h1, section[data-testid="stSidebar"] h2,
-section[data-testid="stSidebar"] h3, section[data-testid="stSidebar"] h4,
-section[data-testid="stSidebar"] label, section[data-testid="stSidebar"] p,
-section[data-testid="stSidebar"] span, section[data-testid="stSidebar"] div,
-section[data-testid="stSidebar"] small, section[data-testid="stSidebar"] li {
-    color: #334155 !important;
-}
-section[data-testid="stSidebar"] hr { border-color: #E2E8F0 !important; }
-h1 { color: #0F172A !important; }
-h2, h3, h4 { color: #1E293B !important; }
-p, span, label, li, td, th, div, small, strong, a { color: #1E293B !important; }
-[data-testid="stAlert"], div[role="alert"], [data-testid="stNotification"] {
-    background: #F8FAFC !important; border: 1px solid #E2E8F0 !important; border-radius: 8px !important;
-}
-[data-testid="stAlert"] *, div[role="alert"] * { color: #334155 !important; }
-[data-testid="stExpander"], [data-testid="stExpander"] > div,
-[data-testid="stExpander"] details, [data-testid="stExpander"] summary {
-    background: #F8FAFC !important; border-color: #E2E8F0 !important; color: #1E293B !important;
-}
-[data-testid="stExpander"] * { color: #1E293B !important; }
-[data-testid="stMetric"] {
-    background: #F8FAFC !important; border: 1px solid #E2E8F0 !important;
-    border-radius: 8px !important; padding: 12px !important;
-}
-[data-testid="stMetricLabel"], [data-testid="stMetricLabel"] * { color: #64748B !important; }
-[data-testid="stMetricValue"], [data-testid="stMetricValue"] * { color: #0F172A !important; }
-[data-baseweb="select"], [data-baseweb="select"] > div, [data-baseweb="select"] ul,
-[data-baseweb="input"], [data-baseweb="input"] > div {
-    background: #FFFFFF !important; border: 1px solid #94A3B8 !important;
-    border-radius: 6px !important; color: #1E293B !important;
-}
-[data-baseweb="select"] *, [data-baseweb="input"] * { color: #1E293B !important; }
-[data-baseweb="tag"] { background: #E2E8F0 !important; color: #1E293B !important; }
-[data-testid="stNumberInput"] input {
-    background: #FFFFFF !important; color: #1E293B !important;
-    border: 1px solid #CBD5E1 !important;
-}
-[data-testid="stNumberInput"] button {
-    background: #F1F5F9 !important; background-color: #F1F5F9 !important;
-    border: 1px solid #CBD5E1 !important; color: #334155 !important;
-}
-[data-testid="stNumberInput"] button:hover {
-    background: #E2E8F0 !important; background-color: #E2E8F0 !important;
-}
-[data-testid="stNumberInput"] button svg {
-    fill: #334155 !important; color: #334155 !important;
-}
-[data-baseweb="popover"], [data-baseweb="popover"] > div,
-[data-baseweb="popover"] > div > div, [data-baseweb="popover"] > div > div > div,
-[data-baseweb="popover"] ul, [data-baseweb="popover"] li,
-[data-baseweb="menu"], [data-baseweb="menu"] > div,
-[data-baseweb="listbox"], [data-baseweb="listbox"] > div,
-div[role="listbox"], div[role="listbox"] > div,
-div[role="listbox"] ul, div[role="listbox"] li {
-    background: #FFFFFF !important; background-color: #FFFFFF !important;
-    border-color: #E2E8F0 !important;
-}
-[data-baseweb="popover"] {
-    border: 1px solid #E2E8F0 !important;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.08) !important;
-}
-[data-baseweb="menu"] *, [data-baseweb="listbox"] *,
-[data-baseweb="popover"] * { color: #1E293B !important; }
-[data-baseweb="menu"] li:hover, [data-baseweb="listbox"] li:hover,
-div[role="listbox"] li:hover {
-    background: #F1F5F9 !important; background-color: #F1F5F9 !important;
-}
-/* Radio button (chart type) — horizontal pill style */
-[data-testid="stRadio"] > div {
-    flex-direction: row !important; gap: 0 !important;
-    background: #F1F5F9 !important; border-radius: 8px !important;
-    padding: 3px !important; border: 1px solid #E2E8F0 !important;
-    display: inline-flex !important;
-}
-[data-testid="stRadio"] > div > label {
-    background: transparent !important; border-radius: 6px !important;
-    padding: 6px 14px !important; margin: 0 !important; cursor: pointer !important;
-    font-size: 0.82rem !important; font-weight: 500 !important;
-    color: #64748B !important; transition: all 0.15s ease !important;
-    white-space: nowrap !important;
-}
-[data-testid="stRadio"] > div > label:has(input:checked) {
-    background: #FFFFFF !important; color: #0F172A !important;
-    font-weight: 600 !important; box-shadow: 0 1px 3px rgba(0,0,0,0.08) !important;
-}
-[data-testid="stRadio"] > div > label:hover:not(:has(input:checked)) {
-    background: rgba(255,255,255,0.5) !important; color: #334155 !important;
-}
-/* Hide the actual radio circle */
-[data-testid="stRadio"] > div > label > div:first-child {
-    display: none !important;
-}
-[data-testid="stPlotlyChart"], [data-testid="stPlotlyChart"] > div,
-[data-testid="stPlotlyChart"] iframe, .stPlotlyChart, .stPlotlyChart > div {
-    background: #FFFFFF !important;
-}
-[data-testid="stDataFrame"], [data-testid="stTable"],
-[data-testid="stDataFrame"] *, [data-testid="stTable"] * {
-    background: #FFFFFF !important; color: #1E293B !important;
-}
-footer, footer * { background: #FFFFFF !important; color: #94A3B8 !important; }
-.stApp svg { fill: #64748B !important; color: #64748B !important; }
-[data-testid="stPlotlyChart"] svg, .js-plotly-plot svg, .plot-container svg {
-    fill: unset !important; color: unset !important;
-}
-/* Don't override checkbox checkmark SVG */
-.stApp [data-testid="stCheckbox"] svg { fill: #FFFFFF !important; color: #FFFFFF !important; stroke: #FFFFFF !important; }
-.stButton > button {
-    background: #FFFFFF !important; color: #334155 !important;
-    border: 1px solid #CBD5E1 !important; border-radius: 6px !important;
-}
-.stButton > button:hover { background: #F8FAFC !important; border-color: #94A3B8 !important; }
-[data-testid="baseButton-primary"], .stButton > button[kind="primary"] {
-    background: #2563EB !important; color: #FFFFFF !important; border: 1px solid #2563EB !important;
-}
-[data-testid="baseButton-primary"]:hover, .stButton > button[kind="primary"]:hover {
-    background: #1D4ED8 !important; border-color: #1D4ED8 !important;
-}
-.stApp button svg { fill: #64748B !important; }
-.stApp div:not([data-testid="stPlotlyChart"] *) { background-color: transparent; }
-.stApp > div, .stApp > div > div,
-[data-testid="stVerticalBlockBorderWrapper"],
-[data-testid="stVerticalBlockBorderWrapper"] > div {
-    background-color: #FFFFFF !important;
-}
-/* Re-assert radio pill style after catch-all */
-.stApp [data-testid="stRadio"] > div {
-    background: #F1F5F9 !important; background-color: #F1F5F9 !important;
-}
-.stApp [data-testid="stRadio"] > div > label {
-    background: transparent !important; background-color: transparent !important;
-}
-.stApp [data-testid="stRadio"] > div > label:has(input:checked) {
-    background: #FFFFFF !important; background-color: #FFFFFF !important;
-}
-
-/* --- Checkbox box styling (fix dark/black background) --- */
-[data-testid="stCheckbox"] {
-    background-color: transparent !important;
-}
-[data-testid="stCheckbox"] label,
-[data-testid="stCheckbox"] label > span,
-[data-testid="stCheckbox"] label > div {
-    background-color: transparent !important;
-}
-/* The visual checkbox square — unchecked state */
-[data-testid="stCheckbox"] [role="checkbox"],
-[data-testid="stCheckbox"] span[data-baseweb="checkbox"],
-[data-testid="stCheckbox"] span[data-baseweb="checkbox"] > span,
-[data-testid="stCheckbox"] span[data-baseweb="checkbox"] > div,
-[data-testid="stCheckbox"] label > span:first-child,
-[data-testid="stCheckbox"] label > span:first-child > span,
-[data-testid="stCheckbox"] label > div:first-child,
-[data-testid="stCheckbox"] label > div:first-child > div,
-[data-testid="stCheckbox"] label > div:first-child > span {
-    background-color: #FFFFFF !important;
-    background: #FFFFFF !important;
-    border-color: #CBD5E1 !important;
-    border-radius: 4px !important;
-}
-/* Checked state — blue background */
-[data-testid="stCheckbox"] [role="checkbox"][aria-checked="true"],
-[data-testid="stCheckbox"] span[data-baseweb="checkbox"][aria-checked="true"],
-[data-testid="stCheckbox"] input:checked + span,
-[data-testid="stCheckbox"] input:checked + div,
-[data-testid="stCheckbox"] input:checked ~ span,
-[data-testid="stCheckbox"] input:checked ~ div,
-[data-testid="stCheckbox"] label:has(input:checked) > span:first-child,
-[data-testid="stCheckbox"] label:has(input:checked) > span:first-child > span,
-[data-testid="stCheckbox"] label:has(input:checked) > div:first-child,
-[data-testid="stCheckbox"] label:has(input:checked) > div:first-child > div,
-[data-testid="stCheckbox"] label:has(input:checked) > div:first-child > span {
-    background-color: #2563EB !important;
-    background: #2563EB !important;
-    border-color: #2563EB !important;
-}
-/* Checkmark SVG icon — white */
-[data-testid="stCheckbox"] svg,
-[data-testid="stCheckbox"] [role="checkbox"] svg,
-[data-testid="stCheckbox"] span[data-baseweb="checkbox"] svg {
-    fill: #FFFFFF !important;
-    color: #FFFFFF !important;
-    stroke: #FFFFFF !important;
-}
-/* Hover state */
-[data-testid="stCheckbox"] [role="checkbox"]:hover,
-[data-testid="stCheckbox"] span[data-baseweb="checkbox"]:hover {
-    border-color: #94A3B8 !important;
-}
-/* Label text */
-[data-testid="stCheckbox"] label p,
-[data-testid="stCheckbox"] label span {
-    color: #334155 !important;
-}
-</style>
-""", unsafe_allow_html=True)
+inject_theme()
 
 
 # ---------------------------------------------------------------------------
@@ -303,7 +58,7 @@ footer, footer * { background: #FFFFFF !important; color: #94A3B8 !important; }
 
 @st.cache_data(show_spinner="Parsing local Excel files...")
 def load_local_files(data_dir: str, sheet: str):
-    """Scan data_dir for .xlsx files (skip temp ~$ files) and parse them using multi-sheet support."""
+    """Scan data_dir for .xlsx files (skip temp ~$ files) and parse them."""
     results = []
     xlsx_files = sorted([
         f for f in os.listdir(data_dir)
@@ -354,20 +109,20 @@ def _discover_sheets(data_dir: str):
 
 
 # ---------------------------------------------------------------------------
-# Sidebar
+# SIDEBAR — dense control panel
 # ---------------------------------------------------------------------------
 st.sidebar.title("Quick Test")
-st.sidebar.caption("Auto-loads all .xlsx files from the project directory.")
+st.sidebar.caption("Auto-loads .xlsx from project directory")
 
 _available_sheets = _discover_sheets(_project_root)
 _sheet_options = ["Auto-detect"] + _available_sheets
 
 sheet_choice = st.sidebar.selectbox(
-    "Sheet to analyse",
+    "Sheet",
     options=_sheet_options,
     index=0,
     key="qt_sheet",
-    help="'Auto-detect' scans all sheets for measurement data. Or pick a specific sheet.",
+    help="Auto-detect scans all sheets. Or pick one.",
 )
 sheet_name = "Raw data" if sheet_choice == "Auto-detect" else sheet_choice
 
@@ -375,12 +130,12 @@ parsed_files = load_local_files(_project_root, sheet_name)
 
 if not parsed_files:
     st.title("Quick Test")
-    st.warning("No .xlsx files found in the project directory, or none could be parsed.")
+    st.warning("No .xlsx files found or none could be parsed.")
     st.stop()
 
-# Show loaded files
+# Loaded files summary
 st.sidebar.markdown("---")
-with st.sidebar.expander(f"Loaded Files ({len(parsed_files)})", expanded=False):
+with st.sidebar.expander(f"Files ({len(parsed_files)})", expanded=False):
     for pf in parsed_files:
         n_rows = len(pf["data"]) if pf["data"] is not None else 0
         builds = ""
@@ -388,9 +143,10 @@ with st.sidebar.expander(f"Loaded Files ({len(parsed_files)})", expanded=False):
             builds = ", ".join(sorted(pf["data"]["Build"].dropna().unique().astype(str)))
         factory = pf.get("factory", "?")
         st.markdown(
-            f"**{pf['filename']}**  \n"
-            f"<small>Factory: {factory} | Part: {pf['part_number']} | "
-            f"Rows: {n_rows} | Builds: {builds}</small>",
+            f"`{pf['filename']}`  \n"
+            f"<span style='font-size:0.72rem;color:{TEXT_MUTED}'>"
+            f"{factory} / {pf['part_number']} / {n_rows} rows"
+            f"</span>",
             unsafe_allow_html=True,
         )
 
@@ -407,21 +163,21 @@ dim_groups = detect_dimension_groups(all_dimensions)
 
 dim_display_map = OrderedDict()
 for dno, dmeta in all_dimensions.items():
-    label = f"{dno} - {dmeta.description}" if dmeta.description else dno
+    label = f"{dno} — {dmeta.description}" if dmeta.description else dno
     dim_display_map[label] = dno
 dim_no_to_label = {v: k for k, v in dim_display_map.items()}
 dim_display_labels = list(dim_display_map.keys())
 
 if not dim_display_labels:
-    st.warning("No dimensions found in the loaded files.")
+    st.warning("No dimensions found in loaded files.")
     st.stop()
 
 # Dimension selector
 st.sidebar.markdown("---")
-group_options = ["Custom selection"] + list(dim_groups.keys())
-selected_preset = st.sidebar.selectbox("Dimension preset", options=group_options, index=0, key="qt_preset")
+group_options = ["Custom"] + list(dim_groups.keys())
+selected_preset = st.sidebar.selectbox("Preset", options=group_options, index=0, key="qt_preset")
 
-if selected_preset != "Custom selection":
+if selected_preset != "Custom":
     preset_dim_nos = dim_groups[selected_preset]
     default_labels = [dim_no_to_label[dno] for dno in preset_dim_nos if dno in dim_no_to_label]
 else:
@@ -451,10 +207,10 @@ for _dno in selected_dim_nos:
                 _all_point_numbers.append(_pn)
 
 excluded_points = st.sidebar.multiselect(
-    "Points to exclude",
+    "Exclude points",
     options=_all_point_numbers,
     default=[],
-    help="Pick points to hide from the chart. Leave empty to show all.",
+    help="Pick points to hide. Empty = show all.",
     key="qt_points",
 )
 if excluded_points:
@@ -465,13 +221,16 @@ else:
     selected_points = None
 
 st.sidebar.markdown("---")
-chart_type = st.sidebar.radio(
+_CHART_LABELS = ["Profile", "Box Plot", "Histogram"]
+_CHART_MAP = {"Profile": "Combined Profile", "Box Plot": "Box Plot", "Histogram": "Histogram"}
+_chart_label = st.sidebar.radio(
     "Chart type",
-    options=["Combined Profile", "Box Plot", "Histogram"],
+    options=_CHART_LABELS,
     index=0,
     horizontal=True,
     key="qt_chart_type",
 )
+chart_type = _CHART_MAP[_chart_label]
 
 # Grouping
 st.sidebar.markdown("---")
@@ -490,7 +249,7 @@ if chart_type in ("Combined Profile", "Box Plot"):
     SECTION_FIELDS = ["Factory", "Build", "Config", "Raw material", "Vendor Serial Number", "Source File"]
     section_fields_available = [s for s in SECTION_FIELDS if s in available_meta or s in ("Factory", "Source File")]
     section_by_fields = st.sidebar.multiselect(
-        "Section-by (columns)", options=section_fields_available,
+        "Section-by", options=section_fields_available,
         default=["Factory"] if "Factory" in section_fields_available else [],
         key="qt_section",
     )
@@ -499,7 +258,7 @@ else:
 
 ROWBY_OPTIONS = ["Raw material", "Build", "Factory", "Config", "None"]
 rowby_options_filtered = [r for r in ROWBY_OPTIONS if r in available_meta or r == "None"]
-row_by = st.sidebar.selectbox("Row-by (rows)", options=rowby_options_filtered,
+row_by = st.sidebar.selectbox("Row-by", options=rowby_options_filtered,
                                index=len(rowby_options_filtered) - 1, key="qt_row")
 
 if chart_type in ("Combined Profile", "Box Plot"):
@@ -509,29 +268,44 @@ else:
     y_axis_mode = "Measurement values"
 
 if chart_type == "Histogram":
-    hist_nbins = st.sidebar.slider("Number of bins", 10, 100, 40, key="qt_bins")
+    hist_nbins = st.sidebar.slider("Bins", 10, 100, 40, key="qt_bins")
 else:
     hist_nbins = 40
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("Y-axis Range")
-use_custom_yrange = st.sidebar.checkbox("Set custom Y-axis range", value=False, key="qt_yr")
+use_custom_yrange = st.sidebar.checkbox("Custom Y range", value=False, key="qt_yr")
 if use_custom_yrange:
-    y_min = st.sidebar.number_input("Y-axis min", value=0.0, format="%.4f", key="qt_ymin")
-    y_max = st.sidebar.number_input("Y-axis max", value=1.0, format="%.4f", key="qt_ymax")
+    y_min = st.sidebar.number_input("Min", value=0.0, format="%.4f", key="qt_ymin")
+    y_max = st.sidebar.number_input("Max", value=1.0, format="%.4f", key="qt_ymax")
     custom_yrange = [y_min, y_max] if y_min < y_max else None
 else:
     custom_yrange = None
 
-# ---------------------------------------------------------------------------
-# Prepare data and render chart
-# ---------------------------------------------------------------------------
-st.title("Quick Test - SPC Data Visualization")
 
+# ---------------------------------------------------------------------------
+# MAIN AREA — chart + analysis
+# ---------------------------------------------------------------------------
+
+# Header row: title left, spec info right
+hdr_left, hdr_right = st.columns([3, 1])
+with hdr_left:
+    st.markdown(
+        f"<h1 style='margin:0;padding:0;font-size:1.3rem;'>{selected_group_label or 'SPC Analysis'}</h1>"
+        f"<span style='font-size:0.75rem;color:{TEXT_MUTED};font-family:{FONT_MONO};'>"
+        f"{len(parsed_files)} file{'s' if len(parsed_files) != 1 else ''} / "
+        f"{chart_type} / {color_by}"
+        f"</span>",
+        unsafe_allow_html=True,
+    )
+
+# ---------------------------------------------------------------------------
+# Prepare data
+# ---------------------------------------------------------------------------
 df, dim_metas = prepare_combined_data(parsed_files, selected_dim_nos)
 
 if df is None or dim_metas is None or df.empty:
-    st.warning("No data found for the selected dimensions.")
+    st.warning("No data found for selected dimensions.")
     st.stop()
 
 all_meas_cols = []
@@ -542,12 +316,12 @@ for dno in selected_dim_nos:
 df_clean = df.dropna(subset=all_meas_cols, how="all").reset_index(drop=True) if all_meas_cols else df
 
 if df_clean.empty:
-    st.warning("No measurement data for the selected dimensions.")
+    st.warning("No measurement data for selected dimensions.")
     st.stop()
 
 # Color pickers
 st.sidebar.markdown("---")
-st.sidebar.subheader("Group Colors")
+st.sidebar.subheader("Colors")
 if color_by != "None" and color_by in df_clean.columns:
     _color_groups = sorted(df_clean[color_by].fillna("Unknown").astype(str).unique())
 else:
@@ -558,7 +332,9 @@ for i, grp in enumerate(_color_groups):
     default_color = get_color_for_group(i)
     custom_color_map[grp] = st.sidebar.color_picker(f"{grp}", value=default_color, key=f"qt_color_{grp}")
 
+# ---------------------------------------------------------------------------
 # Build chart
+# ---------------------------------------------------------------------------
 if chart_type == "Combined Profile":
     fig = build_combined_chart(
         df=df_clean, dim_metas=dim_metas, dim_nos=selected_dim_nos,
@@ -586,32 +362,64 @@ elif chart_type == "Histogram":
     )
 
 if fig is None:
-    st.warning("Could not generate chart. Check that the selected dimensions have data.")
+    st.warning("Could not generate chart. Check dimensions have data.")
     st.stop()
 
-finalize_plotly_style(fig)
+# Apply theme-aligned Plotly styling
+fig.update_layout(
+    paper_bgcolor=WHITE,
+    plot_bgcolor=WHITE,
+    font=dict(
+        color=TEXT_PRIMARY,
+        family="IBM Plex Sans, Barlow, system-ui, sans-serif",
+    ),
+    title=dict(font=dict(
+        color=TEXT_PRIMARY,
+        family="Barlow Condensed, system-ui, sans-serif",
+    )),
+    legend=dict(
+        font=dict(color=TEXT_SECONDARY, size=11),
+        title=dict(font=dict(color=TEXT_MUTED, size=10)),
+    ),
+    xaxis=dict(
+        tickfont=dict(color=TEXT_SECONDARY, family="JetBrains Mono, monospace", size=9),
+        title=dict(font=dict(color=TEXT_SECONDARY)),
+        gridcolor="#F0F0F0",
+        linecolor=BORDER,
+        linewidth=1,
+    ),
+    yaxis=dict(
+        tickfont=dict(color=TEXT_SECONDARY, family="JetBrains Mono, monospace", size=9),
+        title=dict(font=dict(color=TEXT_SECONDARY)),
+        gridcolor="#F0F0F0",
+        linecolor=BORDER,
+        linewidth=1,
+    ),
+)
+
 st.plotly_chart(fig, use_container_width=True, key="qt_main_chart")
 
-# ---------------------------------------------------------------------------
-# Summary Statistics
-# ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Summary Statistics — dense, tabbed
+# ---------------------------------------------------------------------------
 
 def _render_capability_card(cap):
+    """Render process capability metrics in a dense grid."""
     cpk = cap.get("Cpk", cap.get("Cpk (upper)", cap.get("Cpk (lower)", None)))
     if cpk is not None:
         if cpk >= 1.67:
-            rating, color = "Excellent", "#16A34A"
+            rating, color = "EXCELLENT", SUCCESS
         elif cpk >= 1.33:
-            rating, color = "Good", "#2563EB"
+            rating, color = "GOOD", ACCENT
         elif cpk >= 1.0:
-            rating, color = "Marginal", "#D97706"
+            rating, color = "MARGINAL", WARNING
         else:
-            rating, color = "Poor", "#DC2626"
+            rating, color = "POOR", DANGER
     else:
-        rating, color = "N/A", "#64748B"
+        rating, color = "N/A", TEXT_MUTED
 
-    cols = st.columns(4)
+    cols = st.columns(5)
     if "Cp" in cap:
         cols[0].metric("Cp", cap["Cp"])
     if "Cpk" in cap:
@@ -624,25 +432,34 @@ def _render_capability_card(cap):
         cols[2].metric("Pp", cap["Pp"])
     if "Ppk" in cap:
         cols[3].metric("Ppk", cap["Ppk"])
+    cols[4].markdown(
+        f"<div style='text-align:center;padding:4px;'>"
+        f"<span style='font-size:0.65rem;text-transform:uppercase;letter-spacing:0.05em;"
+        f"color:{TEXT_MUTED};font-family:IBM Plex Sans,sans-serif;'>Rating</span><br>"
+        f"<span style='font-size:1.1rem;font-weight:700;color:{color};"
+        f"font-family:JetBrains Mono,monospace;'>{rating}</span></div>",
+        unsafe_allow_html=True,
+    )
 
     cols2 = st.columns(4)
     if "Sigma Level" in cap:
-        cols2[0].metric("Sigma Level", f"{cap['Sigma Level']}s")
+        cols2[0].metric("Sigma", f"{cap['Sigma Level']}s")
     if "DPMO" in cap:
         cols2[1].metric("DPMO", f"{cap['DPMO']:,}")
     if "Yield %" in cap:
         cols2[2].metric("Yield", f"{cap['Yield %']}%")
-    cols2[3].markdown(
-        f"<div style='text-align:center;padding:8px;'>"
-        f"<span style='font-size:0.8em;color:#64748B;'>Rating</span><br>"
-        f"<span style='font-size:1.4em;font-weight:700;color:{color};'>{rating}</span></div>",
-        unsafe_allow_html=True,
-    )
-
     if cap.get("OOS Count", 0) > 0:
-        st.warning(f"Out-of-Spec: {cap['OOS Count']} points ({cap['OOS %']}%)")
+        cols2[3].markdown(
+            f"<div style='padding:4px;font-size:0.82rem;color:{DANGER};'>"
+            f"OOS: {cap['OOS Count']} ({cap['OOS %']}%)</div>",
+            unsafe_allow_html=True,
+        )
     else:
-        st.success(f"All {cap['n']} points within spec (0 OOS)")
+        cols2[3].markdown(
+            f"<div style='padding:4px;font-size:0.82rem;color:{SUCCESS};'>"
+            f"0 OOS / {cap['n']} pts</div>",
+            unsafe_allow_html=True,
+        )
 
 
 with st.expander("Summary Statistics", expanded=True):
@@ -657,7 +474,14 @@ with st.expander("Summary Statistics", expanded=True):
         if not valid_cols:
             continue
 
-        st.markdown(f"### {dno} -- {dmeta.description}")
+        st.markdown(
+            f"<div style='border-bottom:1px solid {BORDER};padding:4px 0 2px;margin-top:8px;'>"
+            f"<span style='font-family:Barlow Condensed,sans-serif;font-size:0.95rem;"
+            f"font-weight:600;color:{TEXT_PRIMARY};'>{dno}</span>"
+            f"<span style='font-size:0.78rem;color:{TEXT_MUTED};margin-left:8px;'>"
+            f"{dmeta.description}</span></div>",
+            unsafe_allow_html=True,
+        )
 
         usl_val = next((v for v in usls if v is not None), None)
         nom_val = next((v for v in nominals if v is not None), None)
@@ -672,19 +496,24 @@ with st.expander("Summary Statistics", expanded=True):
         all_values = pd.Series(all_values).dropna()
 
         tab_cap, tab_anova, tab_trend = st.tabs([
-            "Process Capability", "Group Comparison (ANOVA)", "Trend & Shift Detection"
+            "Process Capability", "ANOVA", "Trend / Shift"
         ])
 
         with tab_cap:
             if len(all_values) < 2:
-                st.info("Not enough data to calculate process capability.")
+                st.info("Not enough data for process capability.")
             else:
                 cap = calc_process_capability(all_values, usl_val, lsl_val)
                 if cap:
                     _render_capability_card(cap)
 
                     if len(valid_cols) > 1:
-                        st.markdown("**Per-Point Capability**")
+                        st.markdown(
+                            f"<div style='font-size:0.72rem;font-weight:600;text-transform:uppercase;"
+                            f"letter-spacing:0.06em;color:{TEXT_MUTED};margin:12px 0 4px;'>"
+                            f"Per-Point Breakdown</div>",
+                            unsafe_allow_html=True,
+                        )
                         rows = []
                         for ci, col in enumerate(valid_cols):
                             col_usl = usls[ci] if ci < len(usls) and usls[ci] is not None else usl_val
@@ -701,12 +530,12 @@ with st.expander("Summary Statistics", expanded=True):
 
         with tab_anova:
             if color_by == "None" or color_by not in df_clean.columns:
-                st.info("Select a Color-by grouping to enable group comparison.")
+                st.info("Select a Color-by grouping for group comparison.")
             else:
                 groups = df_clean[color_by].fillna("Unknown").astype(str)
                 unique_groups = sorted(groups.unique())
                 if len(unique_groups) < 2:
-                    st.info("Need at least 2 groups for ANOVA comparison.")
+                    st.info("Need 2+ groups for ANOVA.")
                 else:
                     group_data = {}
                     for g in unique_groups:
@@ -717,33 +546,35 @@ with st.expander("Summary Statistics", expanded=True):
                             group_data[g] = vals
 
                     if len(group_data) < 2:
-                        st.info("Not enough data in groups for ANOVA.")
+                        st.info("Not enough data in groups.")
                     else:
                         f_stat, p_value = scipy_stats.f_oneway(*group_data.values())
 
                         anova_cols = st.columns(3)
                         anova_cols[0].metric("F-statistic", f"{f_stat:.4f}")
                         anova_cols[1].metric("p-value", f"{p_value:.6f}")
-                        sig = "Yes" if p_value < 0.05 else "No"
-                        sig_color = "#DC2626" if p_value < 0.05 else "#16A34A"
+                        sig = "YES" if p_value < 0.05 else "NO"
+                        sig_color = DANGER if p_value < 0.05 else SUCCESS
                         anova_cols[2].markdown(
-                            f"<div style='text-align:center;padding:8px;'>"
-                            f"<span style='font-size:0.8em;color:#64748B;'>Significant (a=0.05)</span><br>"
-                            f"<span style='font-size:1.4em;font-weight:700;color:{sig_color};'>{sig}</span></div>",
+                            f"<div style='text-align:center;padding:4px;'>"
+                            f"<span style='font-size:0.65rem;text-transform:uppercase;"
+                            f"letter-spacing:0.05em;color:{TEXT_MUTED};'>Significant</span><br>"
+                            f"<span style='font-size:1.1rem;font-weight:700;color:{sig_color};"
+                            f"font-family:JetBrains Mono,monospace;'>{sig}</span></div>",
                             unsafe_allow_html=True,
                         )
 
-                        if p_value < 0.05:
-                            st.warning("Statistically significant difference detected between groups.")
-                        else:
-                            st.success("No statistically significant difference between groups.")
-
-                        st.markdown("**Group Summary**")
+                        st.markdown(
+                            f"<div style='font-size:0.72rem;font-weight:600;text-transform:uppercase;"
+                            f"letter-spacing:0.06em;color:{TEXT_MUTED};margin:8px 0 4px;'>"
+                            f"Group Summary</div>",
+                            unsafe_allow_html=True,
+                        )
                         summary_rows = []
                         for g, vals in group_data.items():
                             summary_rows.append({
-                                "Group": g, "Count": len(vals),
-                                "Mean": round(vals.mean(), 6), "Std Dev": round(vals.std(ddof=1), 6),
+                                "Group": g, "n": len(vals),
+                                "Mean": round(vals.mean(), 6), "Std": round(vals.std(ddof=1), 6),
                                 "Min": round(vals.min(), 6), "Max": round(vals.max(), 6),
                                 "Range": round(vals.max() - vals.min(), 6),
                             })
@@ -757,81 +588,113 @@ with st.expander("Summary Statistics", expanded=True):
                         ss_total = ss_between + ss_within
                         if ss_total > 0:
                             var_cols = st.columns(3)
-                            var_cols[0].metric("Between-Group SS", f"{ss_between:.4f}")
-                            var_cols[1].metric("Within-Group SS", f"{ss_within:.4f}")
-                            var_cols[2].metric("% Variation (Between)", f"{ss_between/ss_total*100:.1f}%")
+                            var_cols[0].metric("SS Between", f"{ss_between:.4f}")
+                            var_cols[1].metric("SS Within", f"{ss_within:.4f}")
+                            var_cols[2].metric("% Between", f"{ss_between/ss_total*100:.1f}%")
 
                         fig_box = go.Figure()
                         for g in unique_groups:
                             if g in group_data:
                                 fig_box.add_trace(go.Box(
                                     y=group_data[g].values, name=g,
-                                    marker_color=custom_color_map.get(g, "#2563EB"),
+                                    marker_color=custom_color_map.get(g, ACCENT),
                                     boxmean="sd",
                                 ))
                         fig_box.update_layout(
-                            title="Group Distribution Comparison",
-                            yaxis_title="Measured Value",
-                            paper_bgcolor="#FFFFFF", plot_bgcolor="#FFFFFF",
-                            font=dict(color="#000000"), height=350,
+                            yaxis_title="Value",
+                            paper_bgcolor=WHITE, plot_bgcolor=WHITE,
+                            font=dict(color=TEXT_PRIMARY, family="IBM Plex Sans, sans-serif"),
+                            height=300,
+                            margin=dict(l=40, r=20, t=30, b=40),
+                            xaxis=dict(linecolor=BORDER, linewidth=1, gridcolor="#F0F0F0"),
+                            yaxis=dict(linecolor=BORDER, linewidth=1, gridcolor="#F0F0F0"),
                         )
                         if usl_val is not None:
-                            fig_box.add_hline(y=usl_val, line_dash="dash", line_color="red",
-                                              annotation_text=f"USL-{usl_val}")
+                            fig_box.add_hline(y=usl_val, line_dash="dash", line_color=DANGER,
+                                              annotation_text=f"USL {usl_val:.4g}")
                         if lsl_val is not None:
-                            fig_box.add_hline(y=lsl_val, line_dash="dash", line_color="red",
-                                              annotation_text=f"LSL-{lsl_val}")
+                            fig_box.add_hline(y=lsl_val, line_dash="dash", line_color=DANGER,
+                                              annotation_text=f"LSL {lsl_val:.4g}")
                         st.plotly_chart(fig_box, use_container_width=True, key=f"qt_anova_box_{dno}")
 
         with tab_trend:
             if len(all_values) < 9:
-                st.info("Need at least 9 data points for trend/shift analysis.")
+                st.info("Need 9+ data points for trend/shift analysis.")
             else:
-                st.markdown("**Nelson Rules Analysis**")
+                st.markdown(
+                    f"<div style='font-size:0.72rem;font-weight:600;text-transform:uppercase;"
+                    f"letter-spacing:0.06em;color:{TEXT_MUTED};margin-bottom:4px;'>"
+                    f"Nelson Rules</div>",
+                    unsafe_allow_html=True,
+                )
                 violations = nelson_rules(all_values)
                 if not violations:
-                    st.success("No Nelson rule violations detected -- process is stable.")
+                    st.markdown(
+                        f"<span style='font-size:0.82rem;color:{SUCCESS};'>No violations — process stable</span>",
+                        unsafe_allow_html=True,
+                    )
                 else:
                     for rule_name, indices in violations.items():
-                        st.warning(f"{rule_name}: {len(indices)} points flagged")
+                        st.markdown(
+                            f"<span style='font-size:0.82rem;color:{WARNING};'>"
+                            f"{rule_name}: {len(indices)} pts</span>",
+                            unsafe_allow_html=True,
+                        )
                     viol_rows = []
                     for rule_name, indices in violations.items():
                         viol_rows.append({
                             "Rule": rule_name, "Violations": len(indices),
-                            "Flagged Indices": str(indices[:20]) + ("..." if len(indices) > 20 else ""),
+                            "Indices": str(indices[:20]) + ("..." if len(indices) > 20 else ""),
                         })
                     st.dataframe(pd.DataFrame(viol_rows), use_container_width=True, hide_index=True)
 
-                st.markdown("**CUSUM (Cumulative Sum) Chart**")
+                # CUSUM
+                st.markdown(
+                    f"<div style='font-size:0.72rem;font-weight:600;text-transform:uppercase;"
+                    f"letter-spacing:0.06em;color:{TEXT_MUTED};margin:12px 0 4px;'>"
+                    f"CUSUM Chart</div>",
+                    unsafe_allow_html=True,
+                )
                 cusum_pos, cusum_neg, shift_pts = cusum_analysis(all_values, target=nom_val)
                 if cusum_pos is not None:
                     fig_cusum = go.Figure()
                     x_idx = list(range(len(cusum_pos)))
                     fig_cusum.add_trace(go.Scatter(x=x_idx, y=cusum_pos, mode="lines", name="CUSUM+",
-                                                    line=dict(color="#2563EB")))
+                                                    line=dict(color=ACCENT, width=1.5)))
                     fig_cusum.add_trace(go.Scatter(x=x_idx, y=cusum_neg, mode="lines", name="CUSUM-",
-                                                    line=dict(color="#DC2626")))
-                    fig_cusum.add_hline(y=5.0, line_dash="dash", line_color="#94A3B8",
-                                        annotation_text="Decision boundary (h=5)")
+                                                    line=dict(color=DANGER, width=1.5)))
+                    fig_cusum.add_hline(y=5.0, line_dash="dash", line_color=TEXT_MUTED,
+                                        annotation_text="h=5")
                     if shift_pts:
                         fig_cusum.add_trace(go.Scatter(
                             x=shift_pts, y=[max(cusum_pos[i], cusum_neg[i]) for i in shift_pts],
-                            mode="markers", name="Shift detected",
-                            marker=dict(color="#DC2626", size=8, symbol="x"),
+                            mode="markers", name="Shift",
+                            marker=dict(color=DANGER, size=6, symbol="x"),
                         ))
                     fig_cusum.update_layout(
-                        title="CUSUM Control Chart", xaxis_title="Observation",
-                        yaxis_title="Cumulative Sum", paper_bgcolor="#FFFFFF",
-                        plot_bgcolor="#FFFFFF", font=dict(color="#000000"), height=300,
+                        xaxis_title="Observation", yaxis_title="Cumulative Sum",
+                        paper_bgcolor=WHITE, plot_bgcolor=WHITE,
+                        font=dict(color=TEXT_PRIMARY, family="IBM Plex Sans, sans-serif"),
+                        height=250, margin=dict(l=40, r=20, t=20, b=40),
+                        xaxis=dict(linecolor=BORDER, linewidth=1, gridcolor="#F0F0F0"),
+                        yaxis=dict(linecolor=BORDER, linewidth=1, gridcolor="#F0F0F0"),
                     )
                     st.plotly_chart(fig_cusum, use_container_width=True, key=f"qt_cusum_{dno}")
 
                     if shift_pts:
-                        st.warning(f"CUSUM detected potential process shifts at {len(shift_pts)} points.")
-                    else:
-                        st.success("CUSUM: No significant process shifts detected.")
+                        st.markdown(
+                            f"<span style='font-size:0.82rem;color:{WARNING};'>"
+                            f"CUSUM: {len(shift_pts)} potential shifts</span>",
+                            unsafe_allow_html=True,
+                        )
 
-                st.markdown("**EWMA (Exponentially Weighted Moving Average)**")
+                # EWMA
+                st.markdown(
+                    f"<div style='font-size:0.72rem;font-weight:600;text-transform:uppercase;"
+                    f"letter-spacing:0.06em;color:{TEXT_MUTED};margin:12px 0 4px;'>"
+                    f"EWMA Chart</div>",
+                    unsafe_allow_html=True,
+                )
                 lam = 0.2
                 ewma = np.zeros(len(all_values))
                 ewma[0] = all_values.iloc[0]
@@ -851,30 +714,36 @@ with st.expander("Summary Statistics", expanded=True):
                 fig_ewma = go.Figure()
                 x_idx = list(range(len(ewma)))
                 fig_ewma.add_trace(go.Scatter(x=x_idx, y=ewma, mode="lines", name="EWMA",
-                                               line=dict(color="#2563EB", width=2)))
+                                               line=dict(color=ACCENT, width=2)))
                 fig_ewma.add_trace(go.Scatter(x=x_idx, y=ewma_ucl, mode="lines", name="UCL",
-                                               line=dict(color="#DC2626", dash="dash", width=1)))
+                                               line=dict(color=DANGER, dash="dash", width=1)))
                 fig_ewma.add_trace(go.Scatter(x=x_idx, y=ewma_lcl, mode="lines", name="LCL",
-                                               line=dict(color="#DC2626", dash="dash", width=1)))
-                fig_ewma.add_hline(y=overall_mean, line_dash="dot", line_color="#94A3B8",
+                                               line=dict(color=DANGER, dash="dash", width=1)))
+                fig_ewma.add_hline(y=overall_mean, line_dash="dot", line_color=TEXT_MUTED,
                                     annotation_text="Center")
                 ooc_ewma = [i for i in range(len(ewma)) if ewma[i] > ewma_ucl[i] or ewma[i] < ewma_lcl[i]]
                 if ooc_ewma:
                     fig_ewma.add_trace(go.Scatter(
                         x=ooc_ewma, y=[ewma[i] for i in ooc_ewma],
-                        mode="markers", name="Out of Control",
-                        marker=dict(color="#DC2626", size=8, symbol="x"),
+                        mode="markers", name="OOC",
+                        marker=dict(color=DANGER, size=6, symbol="x"),
                     ))
                 fig_ewma.update_layout(
-                    title="EWMA Control Chart", xaxis_title="Observation",
-                    yaxis_title="EWMA Value", paper_bgcolor="#FFFFFF",
-                    plot_bgcolor="#FFFFFF", font=dict(color="#000000"), height=300,
+                    xaxis_title="Observation", yaxis_title="EWMA",
+                    paper_bgcolor=WHITE, plot_bgcolor=WHITE,
+                    font=dict(color=TEXT_PRIMARY, family="IBM Plex Sans, sans-serif"),
+                    height=250, margin=dict(l=40, r=20, t=20, b=40),
+                    xaxis=dict(linecolor=BORDER, linewidth=1, gridcolor="#F0F0F0"),
+                    yaxis=dict(linecolor=BORDER, linewidth=1, gridcolor="#F0F0F0"),
                 )
                 st.plotly_chart(fig_ewma, use_container_width=True, key=f"qt_ewma_{dno}")
 
                 if ooc_ewma:
-                    st.warning(f"EWMA: {len(ooc_ewma)} out-of-control points detected.")
-                else:
-                    st.success("EWMA: Process is in statistical control.")
+                    st.markdown(
+                        f"<span style='font-size:0.82rem;color:{WARNING};'>"
+                        f"EWMA: {len(ooc_ewma)} out-of-control</span>",
+                        unsafe_allow_html=True,
+                    )
 
-        st.markdown("---")
+        st.markdown(f"<hr style='border:none;border-top:1px solid {BORDER};margin:8px 0;'>",
+                    unsafe_allow_html=True)

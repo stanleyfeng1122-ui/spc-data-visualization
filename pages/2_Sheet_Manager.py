@@ -64,11 +64,12 @@ for k, v in _DEFAULTS.items():
 def scan_sheets(file_bytes: bytes, filename: str) -> list:
     """Lightweight scanner: detect data sheets, count dims/rows, read part#.
 
+    Uses NON-read-only mode for reliable random cell access.
     Returns list of SheetInfo dicts without doing a full parse.
     """
     import openpyxl
 
-    wb = openpyxl.load_workbook(io.BytesIO(file_bytes), read_only=True, data_only=True)
+    wb = openpyxl.load_workbook(io.BytesIO(file_bytes), read_only=False, data_only=True)
     _NON_DATA_PREFIXES = ("BoxPlotCht", "Histo ")
     _NON_DATA_EXACT = {"Histo Pivot", "Histo Listbox", "Histo Curve"}
     _NON_DATA_KEYWORDS = {"color", "cosmetic", "waive"}
@@ -78,6 +79,8 @@ def scan_sheets(file_bytes: bytes, filename: str) -> list:
         # Skip known non-data sheets
         if sn in _NON_DATA_EXACT or any(sn.startswith(p) for p in _NON_DATA_PREFIXES):
             continue
+        if any(kw in sn.lower() for kw in _NON_DATA_KEYWORDS):
+            continue
 
         ws = wb[sn]
         max_row = ws.max_row or 0
@@ -86,14 +89,17 @@ def scan_sheets(file_bytes: bytes, filename: str) -> list:
         if max_row < 5 or max_col < 5:
             continue
 
-        # Find "Dim. No." row (scan first 30 rows × 30 cols)
+        # Cap max_col to avoid scanning 16K empty columns
+        scan_col_limit = min(max_col, 800)
+
+        # Find "Dim. No." row (scan first 15 rows × 30 cols)
         dim_row = None
         dim_label_col = None
-        for r in range(1, min(31, max_row + 1)):
-            for c in range(1, min(31, max_col + 1)):
+        for r in range(1, min(16, max_row + 1)):
+            for c in range(1, min(31, scan_col_limit + 1)):
                 v = ws.cell(r, c).value
                 if v and isinstance(v, str) and v.strip().lower().replace(".", "").replace(" ", "") in (
-                    "dimno", "dim no", "dimno"
+                    "dimno",
                 ):
                     dim_row = r
                     dim_label_col = c
@@ -102,17 +108,12 @@ def scan_sheets(file_bytes: bytes, filename: str) -> list:
                 break
 
         if dim_row is None:
-            # Check if it's a flat table (e.g., "color" sheet with SN, Point, Gloss columns)
-            # Still useful to list but mark as non-standard
-            if any(kw in sn.lower() for kw in _NON_DATA_KEYWORDS):
-                continue
-            # No Dim. No. row — skip
             continue
 
-        # Read unique dims from dim row
+        # Read unique dims from dim row (cap at 700 cols from label)
         dims = []
-        first_values = []
-        for c in range(dim_label_col + 1, min(max_col + 1, dim_label_col + 500)):
+        col_limit = min(scan_col_limit + 1, dim_label_col + 700)
+        for c in range(dim_label_col + 1, col_limit):
             v = ws.cell(dim_row, c).value
             if v is not None and str(v).strip():
                 s = str(v).strip()
@@ -120,44 +121,23 @@ def scan_sheets(file_bytes: bytes, filename: str) -> list:
                     dims.append(s)
         unique_dims = list(dict.fromkeys(dims))  # preserve order, dedupe
 
-        # Read part number (usually row 2, 1-2 cols after "Part Number :")
+        # Read part number (usually row 2, near "Part Number :")
         part_number = ""
         for r in range(1, min(6, max_row + 1)):
-            for c in range(1, min(31, max_col + 1)):
+            for c in range(1, min(31, scan_col_limit + 1)):
                 v = ws.cell(r, c).value
                 if v and isinstance(v, str) and "part number" in v.lower():
-                    # Part number is typically in the next column
                     pn = ws.cell(r, c + 1).value
                     if pn:
                         part_number = str(pn).strip()
                     break
+            if part_number:
+                break
 
-        # Count data rows (rows after dim_row + ~30 header rows that have data)
-        data_start = dim_row + 25  # approximate: header metadata is ~25 rows
-        data_row_count = 0
-        empty_streak = 0
-        for r in range(data_start, max_row + 1):
-            has_data = False
-            for c in range(dim_label_col, min(dim_label_col + 10, max_col + 1)):
-                v = ws.cell(r, c).value
-                if v is not None and v != "":
-                    has_data = True
-                    break
-            if has_data:
-                data_row_count += 1
-                empty_streak = 0
-            else:
-                empty_streak += 1
-                if empty_streak > 10:
-                    break
-
-        # Read a few sample values for fingerprinting
-        sample_vals = []
-        if data_row_count > 0:
-            for c in range(dim_label_col + 1, min(dim_label_col + 6, max_col + 1)):
-                v = ws.cell(data_start, c).value
-                if v is not None:
-                    sample_vals.append(str(v)[:20])
+        # Estimate data rows: max_row minus header (~35 rows)
+        # Quick approach: just use max_row - header_rows as estimate
+        header_rows = dim_row + 30  # dim metadata + stats rows ≈ 30
+        data_row_estimate = max(0, max_row - header_rows)
 
         results.append({
             "filename": filename,
@@ -165,9 +145,9 @@ def scan_sheets(file_bytes: bytes, filename: str) -> list:
             "dim_count": len(unique_dims),
             "dims_list": unique_dims,
             "dims_set": set(unique_dims),
-            "data_rows": data_row_count,
+            "data_rows": data_row_estimate,
             "part_number": part_number,
-            "sample_vals": sample_vals,
+            "sample_vals": [],
             "selected": True,
             "duplicate_of": None,
         })

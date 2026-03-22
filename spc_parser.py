@@ -165,9 +165,10 @@ def _find_data_start(rows, label_col, data_col_start, after_row, max_search=60):
     Returns (header_row_1based_or_None, data_start_row_1based).
     """
     # Strategy 1: look for "Start Point" or "SN" text in the label area
+    _search_cols = max(label_col + 1, 20)  # search up to label_col at minimum
     for ri in range(after_row - 1, min(after_row + max_search, len(rows))):
         row = rows[ri]
-        for ci in range(min(15, len(row))):
+        for ci in range(min(_search_cols, len(row))):
             val = row[ci].value
             if val is None:
                 continue
@@ -422,19 +423,23 @@ def _parse_single_sheet(wb, sheet_name: str, sheet_rows: list,
     meta_col_map = OrderedDict()
     if header_row_idx is not None and header_row_idx - 1 < len(sheet_rows):
         hrow = sheet_rows[header_row_idx - 1]
-        header_map = {}
-        for ci, cell in enumerate(hrow, 1):
-            val = _safe_str(cell.value).lower()
-            if val:
-                header_map[val] = ci
 
-        for name in ["Build", "Shipment Date", "Color", "Config",
-                      "Vendor Serial Number", "Fabric thickness",
-                      "2D Barcode", "1D Barcode", "RM Coil", "Raw material",
-                      "Start Point", "SN", "Process"]:
-            ci = header_map.get(name.lower())
-            if ci is not None:
-                meta_col_map[name] = ci
+        # Read ALL columns from the header row up to (and including) the
+        # first measurement data column.  This captures every metadata
+        # column regardless of its name — no hardcoded list needed.
+        sn_col = None
+        for ci, cell in enumerate(hrow, 1):
+            val = _safe_str(cell.value).strip()
+            if not val:
+                continue
+            if ci >= data_col_start:
+                break  # past the metadata columns — into measurement data
+            # Skip if it looks like a dimension label (e.g. "SPC_A")
+            if val.upper().startswith("SPC_") or val.upper().startswith("DIM"):
+                break
+            meta_col_map[val] = ci
+            if val.lower() == "sn":
+                sn_col = ci
     else:
         # No header row -- check if there's an SN / serial column
         # (compact format has "SN" at label_col-1, serial numbers at label_col-1)

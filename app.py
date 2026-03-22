@@ -333,41 +333,38 @@ for pf in parsed_files:
     available_meta.update(pf["meta_columns"])
 available_meta.discard("Start Point")
 
-# Color-by / Group-by
-GROUPBY_OPTIONS = ["Raw material", "Build", "Vendor Serial Number", "Config", "None"]
-groupby_options_filtered = [g for g in GROUPBY_OPTIONS if g in available_meta or g == "None"]
+# Build grouping options from actual metadata columns found in the data
+# Always include "Factory" and "Source File" as virtual columns
+_meta_list = sorted(available_meta)
+_groupby_options = [m for m in _meta_list if m not in ("Start Point", "SN")] + ["None"]
+_section_options = [m for m in _meta_list if m not in ("Start Point", "SN")] + ["Factory", "Source File"]
+_section_options = list(dict.fromkeys(_section_options))  # dedupe, preserve order
 
 color_by = st.sidebar.selectbox(
     "Color-by",
-    options=groupby_options_filtered,
-    index=0,
+    options=_groupby_options,
+    index=len(_groupby_options) - 1,  # default to "None"
     help="Choose how to color-code the data traces.",
 )
 
 # Section-by (X grouping): split chart into columns
 if chart_type in ("Combined Profile", "Box Plot"):
-    SECTION_FIELDS = ["Factory", "Build", "Config", "Raw material",
-                      "Vendor Serial Number", "Source File"]
-    section_fields_available = [
-        s for s in SECTION_FIELDS
-        if s in available_meta or s in ("Factory", "Source File")
-    ]
+    _default_section = ["Factory"] if "Factory" in _section_options else []
     section_by_fields = st.sidebar.multiselect(
         "Section-by (columns)",
-        options=section_fields_available,
-        default=["Factory"] if "Factory" in section_fields_available else [],
-        help="Choose one or more fields to combine for section grouping.",
+        options=_section_options,
+        default=_default_section,
+        help="Split chart into side-by-side sections by these fields.",
     )
 else:
     section_by_fields = []
 
 # Row-by (Y grouping): split chart into subplot rows
-ROWBY_OPTIONS = ["Raw material", "Build", "Factory", "Config", "None"]
-rowby_options_filtered = [r for r in ROWBY_OPTIONS if r in available_meta or r == "None"]
+_rowby_options = [m for m in _meta_list if m not in ("Start Point", "SN")] + ["None"]
 row_by = st.sidebar.selectbox(
     "Row-by (rows)",
-    options=rowby_options_filtered,
-    index=len(rowby_options_filtered) - 1,  # default to "None"
+    options=_rowby_options,
+    index=len(_rowby_options) - 1,  # default to "None"
     help="Split the chart into vertically stacked rows by this field.",
 )
 

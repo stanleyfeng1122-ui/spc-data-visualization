@@ -96,8 +96,12 @@ import warnings as _warnings
 _NON_DATA_PREFIXES = ("BoxPlotCht", "Histo ")
 _NON_DATA_EXACT = {"Histo Pivot", "Histo Listbox", "Histo Curve"}
 
-# Build per-file sheet map: {filename: [sheet_names]}
-_file_sheets = {}
+# Build per-file sheet map: {filename: [actual_sheet_names]}
+# Normalize display names (case-insensitive dedup) while keeping actual names per file
+_file_sheets = {}  # fname -> [actual sheet names]
+_display_to_actual = {}  # display_name -> {fname: actual_name}
+_display_sheets = []  # ordered unique display names
+
 for _uf in uploaded_files:
     _raw = _uf.getvalue()
     with _warnings.catch_warnings():
@@ -107,20 +111,25 @@ for _uf in uploaded_files:
                if s not in _NON_DATA_EXACT
                and not any(s.startswith(p) for p in _NON_DATA_PREFIXES)]
     _file_sheets[_uf.name] = _sheets
-    _wb.close()
 
-# Collect all unique sheet names across files
-_all_data_sheets = []
-for _sheets in _file_sheets.values():
     for _sn in _sheets:
-        if _sn not in _all_data_sheets:
-            _all_data_sheets.append(_sn)
+        # Use first-seen casing as the canonical display name
+        _key = _sn.lower().strip()
+        _existing = next((d for d in _display_sheets if d.lower().strip() == _key), None)
+        if _existing is None:
+            _display_sheets.append(_sn)
+            _display_to_actual[_sn] = {_uf.name: _sn}
+        else:
+            if _existing not in _display_to_actual:
+                _display_to_actual[_existing] = {}
+            _display_to_actual[_existing][_uf.name] = _sn
+    _wb.close()
 
 # Sheet multiselect — user picks which sheets to include
 enabled_sheets = st.sidebar.multiselect(
     "Sheets to parse",
-    options=_all_data_sheets,
-    default=_all_data_sheets,
+    options=_display_sheets,
+    default=_display_sheets,
     help="Enable sheets to include. Dimensions with the same name merge across files.",
 )
 
@@ -128,11 +137,26 @@ if not enabled_sheets:
     st.info("Select at least one sheet to parse.")
     st.stop()
 
+# Build the actual sheet names to parse per file (case-insensitive match)
+def _get_actual_sheets_for_file(fname, enabled):
+    """Return list of actual sheet names in this file that match enabled display names."""
+    actual = []
+    for disp_name in enabled:
+        mapping = _display_to_actual.get(disp_name, {})
+        if fname in mapping:
+            actual.append(mapping[fname])
+        else:
+            # Also check by case-insensitive match against file's sheets
+            for fs in _file_sheets.get(fname, []):
+                if fs.lower().strip() == disp_name.lower().strip() and fs not in actual:
+                    actual.append(fs)
+    return actual
+
 # Show which files contribute which sheets
 with st.sidebar.expander("Sheet / File map", expanded=False):
     for _fname, _sheets in _file_sheets.items():
         _short = _fname[:30] + "..." if len(_fname) > 30 else _fname
-        _active = [s for s in _sheets if s in enabled_sheets]
+        _active = _get_actual_sheets_for_file(_fname, enabled_sheets)
         if _active:
             st.markdown(
                 f"`{_short}`  \n"
@@ -175,10 +199,9 @@ def _parse_file_sheets(file_bytes: bytes, filename: str, sheet_names: tuple) -> 
 parsed_files = []
 for uf in uploaded_files:
     try:
-        raw = uf.read()
-        # Only parse sheets that exist in this file AND are enabled
-        _available = _file_sheets.get(uf.name, [])
-        _to_parse = tuple(s for s in enabled_sheets if s in _available)
+        raw = uf.getvalue()
+        # Get actual sheet names for this file using case-insensitive matching
+        _to_parse = tuple(_get_actual_sheets_for_file(uf.name, enabled_sheets))
         if _to_parse:
             results = _parse_file_sheets(raw, uf.name, _to_parse)
             parsed_files.extend(results)
@@ -196,14 +219,17 @@ st.sidebar.markdown("---")
 with st.sidebar.expander(f"Loaded Files ({len(parsed_files)})", expanded=False):
     for pf in parsed_files:
         n_rows = len(pf["data"]) if pf["data"] is not None else 0
-        builds = ""
-        if pf["data"] is not None and "Build" in pf["data"].columns:
-            builds = ", ".join(sorted(pf["data"]["Build"].dropna().unique().astype(str)))
+        n_dims = len(pf["dimensions"])
         factory = pf.get("factory", "?")
         sheet_label = f" [{pf['sheet_name']}]" if pf.get('sheet_name') else ""
+        meta_info = f"{n_dims} dims, {n_rows} rows"
+        # Show CFG values if present
+        if pf["data"] is not None and "CFG" in pf["data"].columns:
+            cfgs = ", ".join(sorted(pf["data"]["CFG"].dropna().unique().astype(str)[:5]))
+            meta_info += f", CFG: {cfgs}"
         st.markdown(
-            f"**{pf['filename']}{sheet_label}**  \n"
-            f"<small>Factory: {factory} | Part: {pf['part_number']} | Rows: {n_rows} | Builds: {builds}</small>",
+            f"`{pf['filename'][:35]}...`{sheet_label}  \n"
+            f"<span style='font-size:0.7rem;color:#737373;'>{meta_info}</span>",
             unsafe_allow_html=True,
         )
 

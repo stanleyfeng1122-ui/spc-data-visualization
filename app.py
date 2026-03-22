@@ -94,7 +94,23 @@ import openpyxl, io as _io
 _all_sheet_names = []
 for _uf in uploaded_files:
     _raw = _uf.getvalue()
-    _wb = openpyxl.load_workbook(_io.BytesIO(_raw), read_only=True, data_only=True)
+    try:
+        _wb = openpyxl.load_workbook(_io.BytesIO(_raw), read_only=True, data_only=True)
+    except TypeError:
+        # openpyxl 3.1.x bug with ExternalReference in some xlsx files
+        # Fall back to reading without read_only mode, or use zipfile to get sheet names
+        import zipfile, xml.etree.ElementTree as _ET
+        _zf = zipfile.ZipFile(_io.BytesIO(_raw))
+        try:
+            _tree = _ET.parse(_zf.open("xl/workbook.xml"))
+            _ns = {"s": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
+            for _sheet_el in _tree.findall(".//s:sheet", _ns):
+                _sn = _sheet_el.get("name")
+                if _sn and _sn not in _all_sheet_names:
+                    _all_sheet_names.append(_sn)
+        finally:
+            _zf.close()
+        continue
     for _sn in _wb.sheetnames:
         if _sn not in _all_sheet_names:
             _all_sheet_names.append(_sn)

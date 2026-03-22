@@ -524,14 +524,25 @@ def _parse_single_sheet(wb, sheet_name: str, sheet_rows: list,
 
 
 def _open_workbook(file_or_path):
-    """Open workbook and return (wb, filename)."""
+    """Open workbook and return (wb, filename).
+
+    Falls back to non-read_only mode if openpyxl 3.1.x raises TypeError
+    due to ExternalReference bug in files with external links.
+    """
     if isinstance(file_or_path, (str,)):
-        wb = openpyxl.load_workbook(file_or_path, data_only=True, read_only=True)
         filename = file_or_path.rsplit("/", 1)[-1].rsplit("\\", 1)[-1]
+        try:
+            wb = openpyxl.load_workbook(file_or_path, data_only=True, read_only=True)
+        except TypeError:
+            wb = openpyxl.load_workbook(file_or_path, data_only=True, read_only=False)
     else:
-        file_or_path.seek(0)
-        wb = openpyxl.load_workbook(file_or_path, data_only=True, read_only=True)
         filename = getattr(file_or_path, "name", "uploaded_file")
+        file_or_path.seek(0)
+        try:
+            wb = openpyxl.load_workbook(file_or_path, data_only=True, read_only=True)
+        except TypeError:
+            file_or_path.seek(0)
+            wb = openpyxl.load_workbook(file_or_path, data_only=True, read_only=False)
     return wb, filename
 
 

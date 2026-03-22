@@ -98,7 +98,10 @@ def _discover_sheets(data_dir: str):
     for fname in xlsx_files:
         fpath = os.path.join(data_dir, fname)
         try:
-            wb = openpyxl.load_workbook(fpath, read_only=True, data_only=True)
+            try:
+                wb = openpyxl.load_workbook(fpath, read_only=True, data_only=True)
+            except TypeError:
+                wb = openpyxl.load_workbook(fpath, read_only=False, data_only=True)
             for sn in wb.sheetnames:
                 if sn not in all_sheets and sn not in _NON_DATA_EXACT and not any(sn.startswith(p) for p in _NON_DATA_PREFIXES):
                     all_sheets.append(sn)

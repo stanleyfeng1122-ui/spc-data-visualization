@@ -30,6 +30,7 @@ from spc_parser import (
     get_filtered_dim_meta,
     ParsedFile,
     DimensionMeta,
+    _open_workbook,
 )
 from chart_utils import (
     COLOR_PALETTE,
@@ -94,23 +95,10 @@ import openpyxl, io as _io
 _all_sheet_names = []
 for _uf in uploaded_files:
     _raw = _uf.getvalue()
-    try:
-        _wb = openpyxl.load_workbook(_io.BytesIO(_raw), read_only=True, data_only=True)
-    except TypeError:
-        # openpyxl 3.1.x bug with ExternalReference in some xlsx files
-        # Fall back to reading without read_only mode, or use zipfile to get sheet names
-        import zipfile, xml.etree.ElementTree as _ET
-        _zf = zipfile.ZipFile(_io.BytesIO(_raw))
-        try:
-            _tree = _ET.parse(_zf.open("xl/workbook.xml"))
-            _ns = {"s": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
-            for _sheet_el in _tree.findall(".//s:sheet", _ns):
-                _sn = _sheet_el.get("name")
-                if _sn and _sn not in _all_sheet_names:
-                    _all_sheet_names.append(_sn)
-        finally:
-            _zf.close()
-        continue
+    import warnings as _warnings
+    with _warnings.catch_warnings():
+        _warnings.simplefilter("ignore")
+        _wb, _ = _open_workbook(_io.BytesIO(_raw))
     for _sn in _wb.sheetnames:
         if _sn not in _all_sheet_names:
             _all_sheet_names.append(_sn)

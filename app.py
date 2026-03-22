@@ -88,68 +88,87 @@ if not uploaded_files:
     st.stop()
 
 # ---------------------------------------------------------------------------
-# Sheet selector – dynamically reads sheets from uploaded files
+# Sheet selector – scan all files, let user enable sheets to parse
 # ---------------------------------------------------------------------------
 import openpyxl, io as _io
+import warnings as _warnings
 
-_all_sheet_names = []
+_NON_DATA_PREFIXES = ("BoxPlotCht", "Histo ")
+_NON_DATA_EXACT = {"Histo Pivot", "Histo Listbox", "Histo Curve"}
+
+# Build per-file sheet map: {filename: [sheet_names]}
+_file_sheets = {}
 for _uf in uploaded_files:
     _raw = _uf.getvalue()
-    import warnings as _warnings
     with _warnings.catch_warnings():
         _warnings.simplefilter("ignore")
         _wb, _ = _open_workbook(_io.BytesIO(_raw))
-    for _sn in _wb.sheetnames:
-        if _sn not in _all_sheet_names:
-            _all_sheet_names.append(_sn)
+    _sheets = [s for s in _wb.sheetnames
+               if s not in _NON_DATA_EXACT
+               and not any(s.startswith(p) for p in _NON_DATA_PREFIXES)]
+    _file_sheets[_uf.name] = _sheets
     _wb.close()
 
-# Filter out known non-data sheets (charts, histograms)
-_NON_DATA_PREFIXES = ("BoxPlotCht", "Histo ")
-_NON_DATA_EXACT = {"Histo Pivot", "Histo Listbox", "Histo Curve"}
-_data_sheets = [s for s in _all_sheet_names
-                if s not in _NON_DATA_EXACT and not any(s.startswith(p) for p in _NON_DATA_PREFIXES)]
+# Collect all unique sheet names across files
+_all_data_sheets = []
+for _sheets in _file_sheets.values():
+    for _sn in _sheets:
+        if _sn not in _all_data_sheets:
+            _all_data_sheets.append(_sn)
 
-# Add "Auto-detect" as first option — lets parse_excel_multi find data sheets automatically
-_sheet_options = ["Auto-detect"] + _data_sheets
-
-sheet_choice = st.sidebar.selectbox(
-    "Sheet to analyse",
-    options=_sheet_options,
-    index=0,
-    help="'Auto-detect' scans all sheets for measurement data. Or pick a specific sheet.",
+# Sheet multiselect — user picks which sheets to include
+enabled_sheets = st.sidebar.multiselect(
+    "Sheets to parse",
+    options=_all_data_sheets,
+    default=_all_data_sheets,
+    help="Enable sheets to include. Dimensions with the same name merge across files.",
 )
-sheet_name = "Raw data" if sheet_choice == "Auto-detect" else sheet_choice
+
+if not enabled_sheets:
+    st.info("Select at least one sheet to parse.")
+    st.stop()
+
+# Show which files contribute which sheets
+with st.sidebar.expander("Sheet / File map", expanded=False):
+    for _fname, _sheets in _file_sheets.items():
+        _short = _fname[:30] + "..." if len(_fname) > 30 else _fname
+        _active = [s for s in _sheets if s in enabled_sheets]
+        if _active:
+            st.markdown(
+                f"`{_short}`  \n"
+                f"<span style='font-size:0.7rem;color:#737373;'>"
+                f"{', '.join(_active)}</span>",
+                unsafe_allow_html=True,
+            )
 
 # ---------------------------------------------------------------------------
-# Parse uploaded files (cached per file + sheet)
+# Parse uploaded files — parse each enabled sheet from each file
 # ---------------------------------------------------------------------------
 
 @st.cache_data(show_spinner="Parsing Excel files...")
-def _parse_file(file_bytes: bytes, filename: str, sheet: str) -> list:
-    """Parse and return list of serialisable dicts (cache-friendly).
-
-    Uses parse_excel_multi to handle files with multiple data sheets
-    (e.g. files without a 'Raw data' sheet that have separate sheets
-    like 'X3745DH MP', 'X3744DH MP').
-    """
+def _parse_file_sheets(file_bytes: bytes, filename: str, sheet_names: tuple) -> list:
+    """Parse specific sheets from a file and return list of dicts."""
     import io
-    buf = io.BytesIO(file_bytes)
-    buf.name = filename
-    parsed_list = parse_excel_multi(buf, sheet_name=sheet)
     results = []
-    for parsed in parsed_list:
-        results.append({
-            "filename": parsed.filename,
-            "sheet_name": parsed.sheet_name,
-            "part_number": parsed.part_number,
-            "part_description": parsed.part_description,
-            "revision": parsed.revision,
-            "factory": parsed.factory,
-            "dimensions": parsed.dimensions,
-            "data": parsed.data,
-            "meta_columns": parsed.meta_columns,
-        })
+    for sn in sheet_names:
+        try:
+            buf = io.BytesIO(file_bytes)
+            buf.name = filename
+            parsed_list = parse_excel_multi(buf, sheet_name=sn)
+            for parsed in parsed_list:
+                results.append({
+                    "filename": parsed.filename,
+                    "sheet_name": parsed.sheet_name,
+                    "part_number": parsed.part_number,
+                    "part_description": parsed.part_description,
+                    "revision": parsed.revision,
+                    "factory": parsed.factory,
+                    "dimensions": parsed.dimensions,
+                    "data": parsed.data,
+                    "meta_columns": parsed.meta_columns,
+                })
+        except Exception:
+            pass  # sheet not in this file — skip silently
     return results
 
 
@@ -157,8 +176,12 @@ parsed_files = []
 for uf in uploaded_files:
     try:
         raw = uf.read()
-        results = _parse_file(raw, uf.name, sheet_name)
-        parsed_files.extend(results)
+        # Only parse sheets that exist in this file AND are enabled
+        _available = _file_sheets.get(uf.name, [])
+        _to_parse = tuple(s for s in enabled_sheets if s in _available)
+        if _to_parse:
+            results = _parse_file_sheets(raw, uf.name, _to_parse)
+            parsed_files.extend(results)
     except Exception as e:
         st.sidebar.error(f"Error parsing {uf.name}: {e}")
 

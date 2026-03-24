@@ -6,6 +6,7 @@ Handles varying column layouts between different vendor files.
 Supports both "Data Input" (summary values) and "Raw data" (full profiles) sheets.
 """
 
+import os
 import openpyxl
 import pandas as pd
 import re
@@ -517,16 +518,24 @@ def _parse_single_sheet(wb, sheet_name: str, sheet_rows: list,
         )
 
     # ------------------------------------------------------------------
-    # 7. Detect factory / site code
+    # 7. Detect factory / site code — filename first (user preference)
     # ------------------------------------------------------------------
-    if "Vendor Serial Number" in result.data.columns:
+    # Primary: extract from filename (e.g. "FXJS X3744..." → "FXJS", "LK X3744..." → "LK")
+    for sep in (" ", "_"):
+        name_parts = os.path.splitext(filename)[0].split(sep)
+        if name_parts and re.match(r'^[A-Z]{2,5}$', name_parts[0].strip()):
+            result.factory = name_parts[0].strip()
+            break
+
+    # Fallback: Vendor Serial Number column
+    if not result.factory and "Vendor Serial Number" in result.data.columns:
         vsn_vals = result.data["Vendor Serial Number"].dropna().astype(str)
         if len(vsn_vals) > 0:
             most_common = vsn_vals.mode()
             if len(most_common) > 0:
                 result.factory = str(most_common.iloc[0]).strip()
 
-    # Fallback: extract factory prefix from SN column (e.g. "FJS..." -> "FJS")
+    # Fallback: SN column prefix (e.g. "FJS..." → "FJS")
     if not result.factory and "SN" in result.data.columns:
         sn_vals = result.data["SN"].dropna().astype(str)
         if len(sn_vals) > 0:
@@ -534,12 +543,6 @@ def _parse_single_sheet(wb, sheet_name: str, sheet_rows: list,
             m = re.match(r'^([A-Z]{2,4})', first_sn)
             if m:
                 result.factory = m.group(1)
-
-    # Fallback: try to extract factory from filename (e.g. "FX_K116_...")
-    if not result.factory:
-        name_parts = filename.split("_")
-        if name_parts and re.match(r'^[A-Z]{2,4}$', name_parts[0]):
-            result.factory = name_parts[0]
 
     return result
 

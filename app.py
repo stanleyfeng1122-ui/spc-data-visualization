@@ -405,7 +405,12 @@ if chart_type in ("Combined Profile", "Box Plot"):
 else:
     y_axis_mode = "Measurement values"
 
-# Histogram-specific controls
+# Chart-specific controls
+if chart_type == "Combined Profile":
+    line_width = st.sidebar.slider("Line width", 0.3, 3.0, 1.2, step=0.1)
+else:
+    line_width = 1.2
+
 if chart_type == "Histogram":
     hist_nbins = st.sidebar.slider("Number of bins", 10, 100, 40)
 else:
@@ -497,6 +502,7 @@ if chart_type == "Combined Profile":
         custom_color_map=custom_color_map,
         custom_yrange=custom_yrange,
         selected_points=selected_points,
+        line_width=line_width,
     )
 elif chart_type == "Box Plot":
     fig = build_box_plot(

@@ -141,6 +141,7 @@ def build_combined_chart(
     custom_color_map: dict = None,
     custom_yrange: list = None,
     selected_points: list = None,
+    line_width: float = 1.2,
 ):
     """Build the combined profile chart with section and row facets."""
     deviation_mode = y_axis_mode == "Deviation from Nominal"
@@ -276,7 +277,7 @@ def build_combined_chart(
                             x=x_positions,
                             y=y_vals,
                             mode="lines",
-                            line=dict(width=0.7, color=color),
+                            line=dict(width=line_width, color=color),
                             opacity=0.45,
                             name=grp_name,
                             legendgroup=grp_name,

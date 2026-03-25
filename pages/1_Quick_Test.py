@@ -267,6 +267,11 @@ if chart_type in ("Combined Profile", "Box Plot"):
 else:
     y_axis_mode = "Measurement values"
 
+if chart_type == "Combined Profile":
+    line_width = st.sidebar.slider("Line width", 0.3, 3.0, 1.2, step=0.1, key="qt_lw")
+else:
+    line_width = 1.2
+
 if chart_type == "Histogram":
     hist_nbins = st.sidebar.slider("Bins", 10, 100, 40, key="qt_bins")
 else:
@@ -342,7 +347,7 @@ if chart_type == "Combined Profile":
         y_axis_mode=y_axis_mode, exclude_intervals=exclude_intervals,
         group_label=selected_group_label, row_by=row_by,
         custom_color_map=custom_color_map, custom_yrange=custom_yrange,
-        selected_points=selected_points,
+        selected_points=selected_points, line_width=line_width,
     )
 elif chart_type == "Box Plot":
     fig = build_box_plot(

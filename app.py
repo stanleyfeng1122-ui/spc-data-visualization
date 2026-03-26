@@ -408,7 +408,7 @@ available_meta.discard("Start Point")
 # Always include "Factory" and "Source File" as virtual columns
 _meta_list = sorted(available_meta)
 _groupby_options = [m for m in _meta_list if m not in ("Start Point", "SN")] + ["None"]
-_section_options = [m for m in _meta_list if m not in ("Start Point", "SN")] + ["Factory", "Source File"]
+_section_options = [m for m in _meta_list if m not in ("Start Point", "SN")] + ["Factory", "Source File", "Sheet Name"]
 _section_options = list(dict.fromkeys(_section_options))  # dedupe, preserve order
 
 color_by = st.sidebar.selectbox(
@@ -457,7 +457,7 @@ else:
     section_by_fields = []
 
 # Row-by (Y grouping): split chart into subplot rows
-_rowby_options = [m for m in _meta_list if m not in ("Start Point", "SN")] + ["None"]
+_rowby_options = [m for m in _meta_list if m not in ("Start Point", "SN")] + ["Factory", "Sheet Name", "None"]
 row_by = st.sidebar.selectbox(
     "Row-by (rows)",
     options=_rowby_options,

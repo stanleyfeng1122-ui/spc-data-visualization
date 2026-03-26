@@ -96,6 +96,7 @@ def prepare_combined_data(parsed_files, dim_nos):
         df = pf["data"].copy()
         df["_factory"] = factory
         df["_source_file"] = pf["filename"]
+        df["_sheet_name"] = pf.get("sheet_name", "?")
 
         meta_cols = [c for c in pf["meta_columns"] if c in df.columns]
         rename_map = {}
@@ -119,7 +120,7 @@ def prepare_combined_data(parsed_files, dim_nos):
                     if local_col != canon[i]:
                         rename_map[local_col] = canon[i]
 
-        keep = meta_cols + local_meas_cols + ["_factory", "_source_file"]
+        keep = meta_cols + local_meas_cols + ["_factory", "_source_file", "_sheet_name"]
         seen = set()
         keep_dedup = []
         for c in keep:
@@ -178,6 +179,10 @@ def compute_sections(df, section_by_fields):
             if "_source_file" in df.columns:
                 return df["_source_file"].fillna("?").astype(str)
             return pd.Series("?", index=df.index)
+        elif field_name == "Sheet Name":
+            if "_sheet_name" in df.columns:
+                return df["_sheet_name"].fillna("?").astype(str)
+            return pd.Series("?", index=df.index)
         elif field_name in df.columns:
             return df[field_name].fillna("?").astype(str)
         return pd.Series("?", index=df.index)
@@ -194,9 +199,18 @@ def compute_row_groups(df, row_by):
     Assign a row group label to each row based on row_by field.
     Returns a Series of row labels aligned with df index.
     """
-    if row_by == "None" or row_by not in df.columns:
+    if row_by == "None":
         return pd.Series("All", index=df.index)
-    return df[row_by].fillna("?").astype(str)
+    # Map virtual field names to internal columns
+    _field_map = {
+        "Factory": "_factory",
+        "Source File": "_source_file",
+        "Sheet Name": "_sheet_name",
+    }
+    col = _field_map.get(row_by, row_by)
+    if col not in df.columns:
+        return pd.Series("All", index=df.index)
+    return df[col].fillna("?").astype(str)
 
 
 # ---------------------------------------------------------------------------
@@ -266,14 +280,22 @@ def build_combined_chart(
     if points_per_section == 0:
         return None
 
-    section_gap = max(3, int(points_per_section * 0.06))
+    # Scale gap relative to points: bigger gap for few points to visually separate sections
+    if points_per_section <= 5:
+        section_gap = max(2, points_per_section)
+    elif points_per_section <= 20:
+        section_gap = max(3, int(points_per_section * 0.15))
+    else:
+        section_gap = max(3, int(points_per_section * 0.06))
 
     if use_row_facets:
+        max_spacing = 1.0 / (n_rows - 1) if n_rows > 1 else 0.06
+        v_spacing = min(0.06, max_spacing * 0.8)
         fig = make_subplots(
             rows=n_rows, cols=1,
             shared_xaxes=True,
             row_titles=[str(r) for r in unique_rows],
-            vertical_spacing=0.06,
+            vertical_spacing=v_spacing,
         )
     else:
         fig = go.Figure()
@@ -501,14 +523,34 @@ def build_combined_chart(
     subtitle = ""  # Don't show section field names (e.g. "Factory") as subtitle
     y_title = "Deviation from Nominal" if deviation_mode else ""
 
-    tick_step = max(1, len(all_tick_vals) // 80)
+    total_ticks = len(all_tick_vals)
+    # Show all ticks if ≤80, otherwise thin to ~80
+    if total_ticks <= 80:
+        tick_step = 1
+        _tick_font_size = max(9, min(12, 150 // max(total_ticks, 1)))
+    else:
+        tick_step = max(1, total_ticks // 80)
+        _tick_font_size = 8
+    # Choose angle based on density: horizontal for sparse, angled for dense
+    if total_ticks <= 10:
+        _tick_angle = 0
+    elif total_ticks <= 40:
+        _tick_angle = -45
+    else:
+        _tick_angle = -90
+    # Add x-axis padding so traces don't stretch to the very edges
+    _x_min = all_tick_vals[0] if all_tick_vals else 0
+    _x_max = all_tick_vals[-1] if all_tick_vals else 1
+    _x_span = _x_max - _x_min
+    _x_pad = max(0.5, _x_span * 0.03)
     tick_kwargs = dict(
         tickmode="array",
         tickvals=all_tick_vals[::tick_step],
         ticktext=all_tick_text[::tick_step],
-        tickangle=-90,
-        tickfont=dict(size=7, color="#000000"),
+        tickangle=_tick_angle,
+        tickfont=dict(size=_tick_font_size, color="#000000"),
         showgrid=False,
+        range=[_x_min - _x_pad, _x_max + _x_pad],
     )
 
     chart_height = 350 * n_rows if use_row_facets else 620
@@ -519,7 +561,7 @@ def build_combined_chart(
             font=dict(size=15), x=0.5, xanchor="center",
         ),
         height=chart_height,
-        margin=dict(l=50, r=120, t=120, b=80),
+        margin=dict(l=50, r=120, t=120, b=100),
         legend=dict(
             title=dict(text=color_by if color_by != "None" else ""),
             orientation="v", yanchor="top", y=1, xanchor="left", x=1.02,
@@ -682,9 +724,11 @@ def build_box_plot(
         color_map = {g: get_color_for_group(i) for i, g in enumerate(unique_colors)}
 
     if use_row_facets:
+        max_spacing = 1.0 / (n_rows - 1) if n_rows > 1 else 0.06
+        v_spacing = min(0.06, max_spacing * 0.8)
         fig = make_subplots(rows=n_rows, cols=1, shared_xaxes=True,
                             row_titles=[str(r) for r in unique_rows],
-                            vertical_spacing=0.06)
+                            vertical_spacing=v_spacing)
     else:
         fig = go.Figure()
 

@@ -13,6 +13,25 @@ import re
 from dataclasses import dataclass, field
 from collections import OrderedDict
 from typing import Optional, Dict, List, Tuple
+
+# ---------------------------------------------------------------------------
+# Monkeypatch: openpyxl 3.1.x ExternalReference bug
+# Some vendor Excel files contain external references with missing 'id'
+# attributes, which causes TypeError in ExternalReference.__init__.
+# ---------------------------------------------------------------------------
+try:
+    from openpyxl.workbook.external_reference import ExternalReference as _ER
+    import inspect
+    _sig = inspect.signature(_ER.__init__)
+    # If 'id' is a required positional param, patch it to be optional
+    _id_param = _sig.parameters.get("id")
+    if _id_param and _id_param.default is inspect.Parameter.empty:
+        _original_er_init = _ER.__init__
+        def _patched_er_init(self, id=None):          # noqa: A002
+            _original_er_init(self, id=id if id is not None else "")
+        _ER.__init__ = _patched_er_init
+except Exception:
+    pass  # If anything goes wrong, leave openpyxl alone
 import io
 
 # ---------------------------------------------------------------------------
@@ -111,14 +130,37 @@ def _is_interval_point(point_label: str) -> bool:
 def _find_dim_no_cell(rows, max_scan_rows=50, max_scan_cols=30):
     """
     Scan the top-left area of a sheet looking for a cell that says "Dim. No."
-    (case-insensitive).  Returns (row_1based, col_1based) or (None, None).
+    or just "Dim." (case-insensitive).  Returns (row_1based, col_1based) or
+    (None, None).
+
+    Matches: "Dim. No.", "Dim No", "Dim.", "Dim" (as standalone label).
+    To avoid false positives on "Dim." without "No.", we verify the next row
+    contains "Dimension Description" in the same column.
     """
+    # Pass 1: strict match — "Dim. No." (preferred)
     for ri in range(min(max_scan_rows, len(rows))):
         row = rows[ri]
         for ci in range(min(max_scan_cols, len(row))):
             val = row[ci].value
             if val is not None and re.match(r"dim\.?\s*no\.?", str(val).strip(), re.IGNORECASE):
                 return ri + 1, ci + 1  # 1-based
+
+    # Pass 2: relaxed match — "Dim." or "Dim" (validate with next-row check)
+    for ri in range(min(max_scan_rows, len(rows))):
+        row = rows[ri]
+        for ci in range(min(max_scan_cols, len(row))):
+            val = row[ci].value
+            if val is None:
+                continue
+            s = str(val).strip().lower()
+            if s in ("dim.", "dim"):
+                # Confirm: next row same column should say "Dimension Description"
+                if ri + 1 < len(rows):
+                    next_row = rows[ri + 1]
+                    if ci < len(next_row):
+                        nv = next_row[ci].value
+                        if nv and "dimension description" in str(nv).strip().lower():
+                            return ri + 1, ci + 1  # 1-based
     return None, None
 
 
@@ -165,8 +207,12 @@ def _find_data_start(rows, label_col, data_col_start, after_row, max_search=60):
     2. First row after metadata with numeric values in data columns
     Returns (header_row_1based_or_None, data_start_row_1based).
     """
-    # Strategy 1: look for "Start Point" or "SN" text in the label area
+    # Strategy 1: look for known header keywords in any column
     _search_cols = max(label_col + 1, 20)  # search up to label_col at minimum
+    _HEADER_KEYWORDS = {
+        "start point", "sn", "build", "no", "no.", "cfg", "config",
+        "color", "vendor serial number", "extrusion",
+    }
     for ri in range(after_row - 1, min(after_row + max_search, len(rows))):
         row = rows[ri]
         for ci in range(min(_search_cols, len(row))):
@@ -174,10 +220,8 @@ def _find_data_start(rows, label_col, data_col_start, after_row, max_search=60):
             if val is None:
                 continue
             s = str(val).strip().lower()
-            if s == "start point":
+            if s in _HEADER_KEYWORDS:
                 return ri + 1, ri + 2  # header row, data starts next row
-            if s == "sn":
-                return ri + 1, ri + 2
 
     # Strategy 2: find first row with numeric data in dimension columns
     for ri in range(after_row - 1, min(after_row + max_search, len(rows))):
@@ -551,23 +595,38 @@ def _open_workbook(file_or_path):
     """Open workbook and return (wb, filename).
 
     Uses keep_links=False to skip external references.
-    If openpyxl returns 0 sheets (strict-OOXML bug), converts the file
-    to transitional OOXML in-memory using zipfile XML namespace rewrite.
+    Falls back to _open_strict_ooxml (which strips external links entirely)
+    when openpyxl returns 0 sheets or crashes on corrupted external refs.
     """
     if isinstance(file_or_path, (str,)):
         filename = file_or_path.rsplit("/", 1)[-1].rsplit("\\", 1)[-1]
-        wb = openpyxl.load_workbook(file_or_path, data_only=True, read_only=True, keep_links=False)
-        if not wb.sheetnames:
-            wb.close()
-            wb = _open_strict_ooxml(file_or_path)
     else:
         filename = getattr(file_or_path, "name", "uploaded_file")
-        file_or_path.seek(0)
-        wb = openpyxl.load_workbook(file_or_path, data_only=True, read_only=True, keep_links=False)
-        if not wb.sheetnames:
-            wb.close()
+
+    # First attempt: normal openpyxl load
+    wb = None
+    try:
+        if isinstance(file_or_path, str):
+            wb = openpyxl.load_workbook(file_or_path, data_only=True, read_only=True, keep_links=False)
+        else:
             file_or_path.seek(0)
-            wb = _open_strict_ooxml(file_or_path)
+            wb = openpyxl.load_workbook(file_or_path, data_only=True, read_only=True, keep_links=False)
+    except (TypeError, AttributeError, KeyError):
+        # openpyxl bug with corrupted ExternalReference or missing targets
+        wb = None
+
+    if wb and wb.sheetnames:
+        return wb, filename
+
+    # Fallback: strip external links and retry
+    if wb:
+        try:
+            wb.close()
+        except Exception:
+            pass
+    if not isinstance(file_or_path, str):
+        file_or_path.seek(0)
+    wb = _open_strict_ooxml(file_or_path)
     return wb, filename
 
 
@@ -614,6 +673,9 @@ def _open_strict_ooxml(file_or_path):
     buf_out = io.BytesIO()
     with zipfile.ZipFile(buf_in, "r") as zin, zipfile.ZipFile(buf_out, "w") as zout:
         for item in zin.infolist():
+            # Skip external link files entirely — they cause openpyxl crashes
+            if "externalLinks" in item.filename:
+                continue
             data = zin.read(item.filename)
             if item.filename.endswith((".xml", ".rels")):
                 text = data.decode("utf-8", errors="replace")
@@ -621,6 +683,11 @@ def _open_strict_ooxml(file_or_path):
                 text = text.replace(' conformance="strict"', "")
                 for strict_ns, trans_ns in _STRICT_TO_TRANSITIONAL.items():
                     text = text.replace(strict_ns, trans_ns)
+                # Remove externalLink Relationship entries from rels files
+                text = re.sub(
+                    r'<Relationship[^>]*Type="[^"]*externalLink[^"]*"[^>]*/?>',
+                    '', text
+                )
                 data = text.encode("utf-8")
             zout.writestr(item, data)
 

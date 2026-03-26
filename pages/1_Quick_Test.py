@@ -268,9 +268,9 @@ else:
     y_axis_mode = "Measurement values"
 
 if chart_type == "Combined Profile":
-    line_width = st.sidebar.slider("Line width", 0.3, 3.0, 1.2, step=0.1, key="qt_lw")
+    line_width = st.sidebar.slider("Line width", 0.3, 3.0, 2.0, step=0.1, key="qt_lw")
 else:
-    line_width = 1.2
+    line_width = 2.0
 
 if chart_type == "Histogram":
     hist_nbins = st.sidebar.slider("Bins", 10, 100, 40, key="qt_bins")

@@ -129,7 +129,7 @@ for _uf in uploaded_files:
 enabled_sheets = st.sidebar.multiselect(
     "Sheets to parse",
     options=_display_sheets,
-    default=_display_sheets,
+    default=[_display_sheets[0]] if _display_sheets else [],
     help="Enable sheets to include. Dimensions with the same name merge across files.",
 )
 
@@ -169,8 +169,10 @@ with st.sidebar.expander("Sheet / File map", expanded=False):
 # Parse uploaded files — parse each enabled sheet from each file
 # ---------------------------------------------------------------------------
 
+_PARSER_VERSION = 7  # bump to invalidate cache after parser fixes
+
 @st.cache_data(show_spinner="Parsing Excel files...")
-def _parse_file_sheets(file_bytes: bytes, filename: str, sheet_names: tuple) -> list:
+def _parse_file_sheets(file_bytes: bytes, filename: str, sheet_names: tuple, _v: int = _PARSER_VERSION) -> list:
     """Parse specific sheets from a file and return list of dicts."""
     import io
     results = []
@@ -191,8 +193,10 @@ def _parse_file_sheets(file_bytes: bytes, filename: str, sheet_names: tuple) -> 
                     "data": parsed.data,
                     "meta_columns": parsed.meta_columns,
                 })
-        except Exception:
-            pass  # sheet not in this file — skip silently
+        except Exception as e:
+            import traceback
+            st.sidebar.warning(f"⚠ {filename} / {sn}: {e}")
+            traceback.print_exc()
     return results
 
 
@@ -205,8 +209,11 @@ for uf in uploaded_files:
         if _to_parse:
             results = _parse_file_sheets(raw, uf.name, _to_parse)
             parsed_files.extend(results)
+        else:
+            st.sidebar.warning(f"No matching sheets for {uf.name[:30]}")
     except Exception as e:
         st.sidebar.error(f"Error parsing {uf.name}: {e}")
+        import traceback; traceback.print_exc()
 
 if not parsed_files:
     st.warning("No files could be parsed. Check the sidebar for errors.")
@@ -290,6 +297,44 @@ selected_dim_labels = st.sidebar.multiselect(
 )
 
 selected_dim_nos = [dim_display_map[lbl] for lbl in selected_dim_labels]
+
+# ---------------------------------------------------------------------------
+# Dimension order controls — reorder selected dimensions
+# ---------------------------------------------------------------------------
+if len(selected_dim_nos) > 1:
+    # Persist custom order in session state
+    _order_key = "dim_order"
+    _current_set = set(selected_dim_nos)
+
+    if _order_key not in st.session_state:
+        st.session_state[_order_key] = list(selected_dim_nos)
+    else:
+        # Sync: keep order for dims still selected, append new ones at end
+        _prev = [d for d in st.session_state[_order_key] if d in _current_set]
+        _new = [d for d in selected_dim_nos if d not in set(_prev)]
+        st.session_state[_order_key] = _prev + _new
+
+    _ordered = st.session_state[_order_key]
+
+    st.sidebar.caption("Dimension order (drag-style)")
+    _dim_short = {d: d.replace("SPC_", "") for d in _ordered}
+
+    for idx, dno in enumerate(_ordered):
+        cols = st.sidebar.columns([3, 1, 1])
+        cols[0].markdown(f"**{idx+1}.** {_dim_short[dno]}")
+        if idx > 0:
+            if cols[1].button("↑", key=f"up_{dno}"):
+                _ordered[idx], _ordered[idx - 1] = _ordered[idx - 1], _ordered[idx]
+                st.session_state[_order_key] = _ordered
+                st.rerun()
+        if idx < len(_ordered) - 1:
+            if cols[2].button("↓", key=f"dn_{dno}"):
+                _ordered[idx], _ordered[idx + 1] = _ordered[idx + 1], _ordered[idx]
+                st.session_state[_order_key] = _ordered
+                st.rerun()
+
+    selected_dim_nos = _ordered
+
 selected_group_label = " / ".join(
     dno.replace("SPC_", "") for dno in selected_dim_nos
 ) if selected_dim_nos else ""
@@ -373,6 +418,32 @@ color_by = st.sidebar.selectbox(
     help="Choose how to color-code the data traces.",
 )
 
+# Highlight filter — pick specific groups to color; rest shown as muted gray
+highlight_groups = None  # None = highlight all (no filter)
+if color_by != "None":
+    # Collect all unique values for the color-by field across all files
+    _all_color_vals = set()
+    for pf in parsed_files:
+        if pf["data"] is not None and color_by in pf["data"].columns:
+            _all_color_vals.update(
+                pf["data"][color_by].dropna().astype(str).unique()
+            )
+    _all_color_vals = sorted(_all_color_vals)
+
+    if len(_all_color_vals) > 1:
+        _selected_highlights = st.sidebar.multiselect(
+            f"Highlight {color_by}",
+            options=_all_color_vals,
+            default=[],
+            help=(
+                "Pick specific groups to highlight with color. "
+                "Unselected groups are shown in light gray. "
+                "Leave empty to color all groups."
+            ),
+        )
+        if _selected_highlights:
+            highlight_groups = set(_selected_highlights)
+
 # Section-by (X grouping): split chart into columns
 if chart_type in ("Combined Profile", "Box Plot"):
     _default_section = ["Factory"] if "Factory" in _section_options else []
@@ -407,9 +478,9 @@ else:
 
 # Chart-specific controls
 if chart_type == "Combined Profile":
-    line_width = st.sidebar.slider("Line width", 0.3, 3.0, 1.2, step=0.1)
+    line_width = st.sidebar.slider("Line width", 0.3, 3.0, 2.0, step=0.1)
 else:
-    line_width = 1.2
+    line_width = 2.0
 
 if chart_type == "Histogram":
     hist_nbins = st.sidebar.slider("Number of bins", 10, 100, 40)
@@ -436,6 +507,43 @@ if use_custom_yrange:
         custom_yrange = [y_min, y_max]
 else:
     custom_yrange = None
+
+# ---------------------------------------------------------------------------
+# Outlier exclusion
+# ---------------------------------------------------------------------------
+st.sidebar.markdown("---")
+st.sidebar.subheader("Outlier Exclusion")
+exclude_outliers = st.sidebar.checkbox(
+    "Exclude outlier rows",
+    value=False,
+    help="Hide rows (parts) whose measurements fall far outside the typical range.",
+)
+if exclude_outliers:
+    outlier_method = st.sidebar.selectbox(
+        "Method",
+        options=["IQR (Interquartile Range)", "Z-score", "Spec limits (USL/LSL)"],
+        index=0,
+        help=(
+            "IQR: exclude rows with any value beyond Q1-k*IQR or Q3+k*IQR. "
+            "Z-score: exclude rows with any value beyond k standard deviations. "
+            "Spec limits: exclude rows with any value beyond USL/LSL."
+        ),
+    )
+    if outlier_method.startswith("Spec"):
+        outlier_k = None  # use spec limits directly
+    else:
+        default_k = 1.5 if outlier_method.startswith("IQR") else 3.0
+        outlier_k = st.sidebar.number_input(
+            "Threshold (k)",
+            min_value=0.5,
+            max_value=10.0,
+            value=default_k,
+            step=0.5,
+            help="IQR: typical 1.5 (moderate) or 3.0 (extreme only). Z-score: typical 3.0.",
+        )
+else:
+    outlier_method = None
+    outlier_k = None
 
 # ---------------------------------------------------------------------------
 # Chart rendering
@@ -470,6 +578,64 @@ if df_clean.empty:
     st.stop()
 
 # ---------------------------------------------------------------------------
+# Outlier filtering (applied before charting)
+# ---------------------------------------------------------------------------
+_outlier_removed = 0
+if exclude_outliers and all_meas_cols:
+    _n_before = len(df_clean)
+    _meas_data = df_clean[all_meas_cols].apply(pd.to_numeric, errors="coerce")
+
+    if outlier_method and outlier_method.startswith("IQR"):
+        _q1 = _meas_data.quantile(0.25)
+        _q3 = _meas_data.quantile(0.75)
+        _iqr = _q3 - _q1
+        _lower = _q1 - outlier_k * _iqr
+        _upper = _q3 + outlier_k * _iqr
+        _mask = ~((_meas_data < _lower) | (_meas_data > _upper)).any(axis=1)
+        df_clean = df_clean[_mask].reset_index(drop=True)
+
+    elif outlier_method and outlier_method.startswith("Z-score"):
+        _mean = _meas_data.mean()
+        _std = _meas_data.std()
+        # Avoid division by zero for constant columns
+        _std = _std.replace(0, np.nan)
+        _z = ((_meas_data - _mean) / _std).abs()
+        _mask = ~(_z > outlier_k).any(axis=1)
+        df_clean = df_clean[_mask].reset_index(drop=True)
+
+    elif outlier_method and outlier_method.startswith("Spec"):
+        # Use USL/LSL from dimension metadata
+        _col_usl = {}
+        _col_lsl = {}
+        for dno in selected_dim_nos:
+            if dno in dim_metas:
+                dmeta = dim_metas[dno]
+                for cl, u, l in zip(dmeta.col_labels, dmeta.usl, dmeta.lsl):
+                    if cl in _meas_data.columns:
+                        if u is not None:
+                            _col_usl[cl] = u
+                        if l is not None:
+                            _col_lsl[cl] = l
+        if _col_usl or _col_lsl:
+            _out_mask = pd.Series(False, index=df_clean.index)
+            for col in _meas_data.columns:
+                vals = _meas_data[col]
+                if col in _col_usl:
+                    _out_mask = _out_mask | (vals > _col_usl[col])
+                if col in _col_lsl:
+                    _out_mask = _out_mask | (vals < _col_lsl[col])
+            df_clean = df_clean[~_out_mask].reset_index(drop=True)
+
+    _outlier_removed = _n_before - len(df_clean)
+
+if df_clean.empty:
+    st.warning("All rows were excluded as outliers. Try a less aggressive threshold.")
+    st.stop()
+
+if _outlier_removed > 0:
+    st.caption(f"🔍 Outlier exclusion: removed {_outlier_removed} of {_outlier_removed + len(df_clean)} rows ({_outlier_removed / (_outlier_removed + len(df_clean)) * 100:.1f}%)")
+
+# ---------------------------------------------------------------------------
 # Per-group color pickers
 # ---------------------------------------------------------------------------
 st.sidebar.markdown("---")
@@ -481,11 +647,32 @@ else:
     _color_groups = ["All"]
 
 custom_color_map = {}
-for i, grp in enumerate(_color_groups):
-    default_color = get_color_for_group(i)
-    custom_color_map[grp] = st.sidebar.color_picker(
-        f"{grp}", value=default_color, key=f"color_{grp}"
+_color_idx = 0
+
+if highlight_groups is not None:
+    # Show highlighted color pickers first, then one picker for "Rest"
+    st.sidebar.caption("Highlighted")
+    for grp in _color_groups:
+        if grp in highlight_groups:
+            default_color = get_color_for_group(_color_idx)
+            _color_idx += 1
+            custom_color_map[grp] = st.sidebar.color_picker(
+                f"{grp}", value=default_color, key=f"color_{grp}"
+            )
+    st.sidebar.caption("Others")
+    _muted_color = st.sidebar.color_picker(
+        "Rest (non-highlighted)", value="#D4D4D4", key="color_muted"
     )
+    for grp in _color_groups:
+        if grp not in highlight_groups:
+            custom_color_map[grp] = _muted_color
+else:
+    for grp in _color_groups:
+        default_color = get_color_for_group(_color_idx)
+        _color_idx += 1
+        custom_color_map[grp] = st.sidebar.color_picker(
+            f"{grp}", value=default_color, key=f"color_{grp}"
+        )
 
 # Build the chart based on selected chart type
 if chart_type == "Combined Profile":
@@ -502,6 +689,7 @@ if chart_type == "Combined Profile":
         custom_color_map=custom_color_map,
         custom_yrange=custom_yrange,
         selected_points=selected_points,
+        highlight_groups=highlight_groups,
         line_width=line_width,
     )
 elif chart_type == "Box Plot":
@@ -509,6 +697,7 @@ elif chart_type == "Box Plot":
         df=df_clean,
         dim_metas=dim_metas,
         dim_nos=selected_dim_nos,
+        section_by_fields=section_by_fields,
         color_by=color_by,
         y_axis_mode=y_axis_mode,
         exclude_intervals=exclude_intervals,
@@ -517,6 +706,7 @@ elif chart_type == "Box Plot":
         custom_color_map=custom_color_map,
         custom_yrange=custom_yrange,
         selected_points=selected_points,
+        highlight_groups=highlight_groups,
     )
 elif chart_type == "Histogram":
     fig = build_histogram(

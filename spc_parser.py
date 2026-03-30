@@ -419,16 +419,24 @@ def _parse_single_sheet(wb, sheet_name: str, sheet_rows: list,
 
         col_labels = []
         point_numbers = []
+        _label_counts = {}  # track duplicates for unique col_labels
         for idx, ci in enumerate(cols):
             pt = col_point.get(ci, "")
             if pt:
                 point_numbers.append(pt)
-                col_labels.append(f"{dno}_{pt}")
+                candidate = f"{dno}_{pt}"
             else:
                 # Synthesize point label: P0, P1, P2, ...
                 syn_pt = f"P{idx}"
                 point_numbers.append(syn_pt)
-                col_labels.append(f"{dno}_{syn_pt}")
+                candidate = f"{dno}_{syn_pt}"
+            # Ensure unique col_labels (Data Input sheets have repeated point numbers)
+            if candidate in _label_counts:
+                _label_counts[candidate] += 1
+                col_labels.append(f"{candidate}_{_label_counts[candidate]}")
+            else:
+                _label_counts[candidate] = 0
+                col_labels.append(candidate)
 
         result.dimensions[dno] = DimensionMeta(
             dim_no=dno,

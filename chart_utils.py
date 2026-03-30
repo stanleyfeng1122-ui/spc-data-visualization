@@ -45,13 +45,47 @@ def _get_factory(pf):
     return pf.get("factory") or "Unknown"
 
 
+def _find_matching_dim(pf_dims, target_dno):
+    """Find a dimension in pf_dims that matches target_dno.
+
+    Handles naming variations like SPC_A vs SPC_A-1 by comparing
+    the base name (stripping trailing -N suffixes) and checking if
+    column labels overlap.
+    """
+    if target_dno in pf_dims:
+        return target_dno
+
+    # Strip trailing dash-number suffix for fuzzy matching
+    # e.g. "SPC_A-1" base is "SPC_A", "SPC_A" base is "SPC_A"
+    import re
+    target_base = re.sub(r'-\d+$', '', target_dno)
+
+    for candidate_dno, candidate_meta in pf_dims.items():
+        candidate_base = re.sub(r'-\d+$', '', candidate_dno)
+        if candidate_base == target_base:
+            return candidate_dno
+
+    return None
+
+
 def prepare_combined_data(parsed_files, dim_nos):
     """
     Combine data from all files for the requested dimensions.
     Returns (df, dim_metas_dict) where df has all rows and a _factory column.
+
+    Handles dimension name variations between files (e.g. SPC_A vs SPC_A-1)
+    by fuzzy-matching on base dimension name and renaming columns to align.
     """
     frames = []
     dim_metas = OrderedDict()
+
+    # First pass: collect canonical dim_metas from the first file that has each dim
+    for pf in parsed_files:
+        for dno in dim_nos:
+            if dno not in dim_metas:
+                match = _find_matching_dim(pf["dimensions"], dno)
+                if match:
+                    dim_metas[dno] = pf["dimensions"][match]
 
     for pf in parsed_files:
         factory = _get_factory(pf)
@@ -59,20 +93,51 @@ def prepare_combined_data(parsed_files, dim_nos):
         df["_factory"] = factory
         df["_source_file"] = pf["filename"]
 
-        for dno in dim_nos:
-            if dno in pf["dimensions"] and dno not in dim_metas:
-                dim_metas[dno] = pf["dimensions"][dno]
-
         meta_cols = [c for c in pf["meta_columns"] if c in df.columns]
         meas_cols = []
+        rename_map = {}
+
         for dno in dim_nos:
-            if dno in pf["dimensions"]:
-                dmeta = pf["dimensions"][dno]
-                meas_cols.extend([c for c in dmeta.col_labels if c in df.columns])
+            match = _find_matching_dim(pf["dimensions"], dno)
+            if match is None:
+                continue
+
+            local_meta = pf["dimensions"][match]
+            canonical_meta = dim_metas.get(dno)
+
+            if canonical_meta and match != dno:
+                # Rename local columns to canonical names so they align
+                for local_label, canon_label in zip(
+                    local_meta.col_labels, canonical_meta.col_labels
+                ):
+                    if local_label in df.columns and local_label != canon_label:
+                        rename_map[local_label] = canon_label
+
+            # Use canonical labels for column selection
+            target_meta = canonical_meta if canonical_meta else local_meta
+            meas_cols.extend([c for c in target_meta.col_labels if c in df.columns])
+
+            # Also include local labels that will be renamed
+            for local_label in local_meta.col_labels:
+                if local_label in df.columns and local_label in rename_map:
+                    meas_cols.append(local_label)
+
+        # Deduplicate while preserving order
+        seen = set()
+        meas_cols_dedup = []
+        for c in meas_cols:
+            if c not in seen:
+                seen.add(c)
+                meas_cols_dedup.append(c)
+        meas_cols = meas_cols_dedup
 
         keep = meta_cols + meas_cols + ["_factory", "_source_file"]
         keep = [c for c in keep if c in df.columns]
         df = df[keep]
+
+        if rename_map:
+            df = df.rename(columns=rename_map)
+
         frames.append(df)
 
     if not frames:
@@ -318,6 +383,23 @@ def build_combined_chart(
         fig.add_vline(x=bx, line=dict(color="rgba(100,116,139,0.5)", width=1.5, dash="solid"))
 
     annotations = []
+
+    # Section label annotations at the top of each section
+    if section_by_fields and unique_sections:
+        for sec_label, (sx, ex) in section_x_ranges.items():
+            mid_x = (sx + ex) / 2
+            annotations.append(dict(
+                x=mid_x, y=1.0,
+                xref="x", yref="paper",
+                text=f"<b>{sec_label}</b>",
+                showarrow=False,
+                font=dict(size=11, color="#334155"),
+                bgcolor="rgba(241,245,249,0.85)",
+                bordercolor="rgba(148,163,184,0.4)",
+                borderwidth=1,
+                borderpad=3,
+                yanchor="bottom",
+            ))
 
     is_group = len(dim_nos) > 1
     if is_group:

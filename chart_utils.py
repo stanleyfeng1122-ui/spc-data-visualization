@@ -4,6 +4,7 @@ Extracted from app.py so both the main app and the Quick Test page
 can share the same logic without duplication.
 """
 
+import re
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
@@ -45,13 +46,46 @@ def _get_factory(pf):
     return pf.get("factory") or "Unknown"
 
 
+def _find_matching_dim(pf_dims, target_dno):
+    """Find a dimension in pf_dims that matches target_dno.
+
+    Handles naming variations like SPC_A vs SPC_A-1 by comparing
+    the base name (stripping trailing -N suffixes) and checking if
+    column labels overlap.
+    """
+    if target_dno in pf_dims:
+        return target_dno
+
+    # Strip trailing dash-number suffix for fuzzy matching
+    # e.g. "SPC_A-1" base is "SPC_A", "SPC_A" base is "SPC_A"
+    target_base = re.sub(r'-\d+$', '', target_dno)
+
+    for candidate_dno, candidate_meta in pf_dims.items():
+        candidate_base = re.sub(r'-\d+$', '', candidate_dno)
+        if candidate_base == target_base:
+            return candidate_dno
+
+    return None
+
+
 def prepare_combined_data(parsed_files, dim_nos):
     """
     Combine data from all files for the requested dimensions.
     Returns (df, dim_metas_dict) where df has all rows and a _factory column.
+
+    Handles dimension name variations between files (e.g. SPC_A vs SPC_A-1)
+    by fuzzy-matching on base dimension name and renaming columns to align.
     """
     frames = []
     dim_metas = OrderedDict()
+
+    # First pass: collect canonical dim_metas from the first file that has each dim
+    for pf in parsed_files:
+        for dno in dim_nos:
+            if dno not in dim_metas:
+                match = _find_matching_dim(pf["dimensions"], dno)
+                if match:
+                    dim_metas[dno] = pf["dimensions"][match]
 
     for pf in parsed_files:
         factory = _get_factory(pf)
@@ -59,20 +93,45 @@ def prepare_combined_data(parsed_files, dim_nos):
         df["_factory"] = factory
         df["_source_file"] = pf["filename"]
 
-        for dno in dim_nos:
-            if dno in pf["dimensions"] and dno not in dim_metas:
-                dim_metas[dno] = pf["dimensions"][dno]
-
         meta_cols = [c for c in pf["meta_columns"] if c in df.columns]
         meas_cols = []
+        rename_map = {}
+
         for dno in dim_nos:
-            if dno in pf["dimensions"]:
-                dmeta = pf["dimensions"][dno]
-                meas_cols.extend([c for c in dmeta.col_labels if c in df.columns])
+            match = _find_matching_dim(pf["dimensions"], dno)
+            if match is None:
+                continue
+
+            local_meta = pf["dimensions"][match]
+            canonical_meta = dim_metas.get(dno)
+
+            if canonical_meta and match != dno:
+                # Rename local columns to canonical names so they align
+                for local_label, canon_label in zip(
+                    local_meta.col_labels, canonical_meta.col_labels
+                ):
+                    if local_label in df.columns and local_label != canon_label:
+                        rename_map[local_label] = canon_label
+
+            # Always add local labels — rename_map will convert them to canonical names later
+            meas_cols.extend([c for c in local_meta.col_labels if c in df.columns])
+
+        # Deduplicate while preserving order
+        seen = set()
+        meas_cols_dedup = []
+        for c in meas_cols:
+            if c not in seen:
+                seen.add(c)
+                meas_cols_dedup.append(c)
+        meas_cols = meas_cols_dedup
 
         keep = meta_cols + meas_cols + ["_factory", "_source_file"]
         keep = [c for c in keep if c in df.columns]
         df = df[keep]
+
+        if rename_map:
+            df = df.rename(columns=rename_map)
+
         frames.append(df)
 
     if not frames:

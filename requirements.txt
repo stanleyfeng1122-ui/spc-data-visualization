@@ -3,3 +3,4 @@ openpyxl
 pandas
 plotly
 numpy
+kaleido

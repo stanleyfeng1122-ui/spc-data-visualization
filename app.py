@@ -546,6 +546,47 @@ else:
     outlier_k = None
 
 # ---------------------------------------------------------------------------
+# Batch Export
+# ---------------------------------------------------------------------------
+st.sidebar.markdown("---")
+st.sidebar.markdown("**Batch Export**")
+
+if st.sidebar.button("Download All Charts as ZIP", type="secondary"):
+    try:
+        from chart_utils import batch_export_all_dims
+        import zipfile, io as _zip_io
+
+        # Collect chart kwargs from current sidebar state
+        _chart_kwargs = dict(
+            color_by=color_by,
+            section_by_fields=section_by_fields,
+            row_by=row_by if 'row_by' in dir() else "None",
+            deviation_mode=deviation_mode if 'deviation_mode' in dir() else False,
+            highlight_groups=highlight_groups if 'highlight_groups' in dir() else {},
+        )
+
+        with st.spinner("Rendering charts\u2026"):
+            _png_dict = batch_export_all_dims(parsed_files, list(all_dimensions.keys()), _chart_kwargs)
+
+        # Build ZIP in memory
+        _zip_buf = _zip_io.BytesIO()
+        with zipfile.ZipFile(_zip_buf, "w", zipfile.ZIP_DEFLATED) as _zf:
+            for _dno, _png_bytes in _png_dict.items():
+                _zf.writestr(f"{_dno}.png", _png_bytes)
+        _zip_buf.seek(0)
+
+        st.sidebar.download_button(
+            label=f"Save ZIP ({len(_png_dict)} charts)",
+            data=_zip_buf,
+            file_name="spc_charts.zip",
+            mime="application/zip",
+        )
+    except ImportError as e:
+        st.sidebar.error(str(e))
+    except Exception as e:
+        st.sidebar.error(f"Export failed: {e}")
+
+# ---------------------------------------------------------------------------
 # Chart rendering
 # ---------------------------------------------------------------------------
 

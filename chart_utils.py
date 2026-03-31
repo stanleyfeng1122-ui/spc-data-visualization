@@ -1199,3 +1199,81 @@ def cusum_analysis(data_series, target=None, h=5.0, k=0.5):
             shift_points.append(i)
 
     return cusum_pos, cusum_neg, shift_points
+
+
+# ---------------------------------------------------------------------------
+# Render / export helpers
+# ---------------------------------------------------------------------------
+
+def render_chart_to_png(fig, width: int = 1400, height: int = 700) -> bytes:
+    """Render a Plotly figure to PNG bytes using kaleido.
+
+    Parameters
+    ----------
+    fig : plotly.graph_objects.Figure
+    width : int
+        Output image width in pixels (default 1400).
+    height : int
+        Output image height in pixels (default 700).
+
+    Returns
+    -------
+    bytes
+        Raw PNG image bytes.
+
+    Raises
+    ------
+    ImportError
+        If the kaleido package is not installed.
+    """
+    try:
+        return fig.to_image(format="png", width=width, height=height, engine="kaleido")
+    except ValueError as exc:
+        # kaleido raises ValueError when the engine is not available
+        if "kaleido" in str(exc).lower() or "engine" in str(exc).lower():
+            raise ImportError(
+                "kaleido is required for PNG export: pip install kaleido"
+            ) from exc
+        raise
+
+
+def batch_export_all_dims(
+    parsed_files: list,
+    dim_nos: list,
+    chart_kwargs: dict,
+) -> dict:
+    """Export every requested dimension as a PNG and return a mapping of dim_no → bytes.
+
+    Parameters
+    ----------
+    parsed_files : list
+        List of ParsedFile dicts (same format used throughout chart_utils).
+    dim_nos : list[str]
+        Dimension names to export, e.g. ``["SPC_AT", "SPC_AU", "SPC_AV"]``.
+    chart_kwargs : dict
+        Keyword arguments forwarded verbatim to ``build_combined_chart()``
+        (e.g. ``color_by``, ``section_by_fields``, ``y_axis_mode``, …).
+
+    Returns
+    -------
+    dict[str, bytes]
+        Mapping of dimension name → PNG bytes.  Dimensions that fail for any
+        reason are skipped (an error is printed to stdout) so that a single
+        bad dimension does not abort the entire export.
+    """
+    result: dict = {}
+
+    for dim_no in dim_nos:
+        try:
+            df, dim_metas = prepare_combined_data(parsed_files, [dim_no])
+            if df is None or df.empty:
+                print(f"[batch_export] Skipping {dim_no!r}: no data returned.")
+                continue
+
+            fig = build_combined_chart(df, dim_metas, [dim_no], **chart_kwargs)
+            png_bytes = render_chart_to_png(fig)
+            result[dim_no] = png_bytes
+        except Exception as exc:  # noqa: BLE001
+            print(f"[batch_export] Error exporting {dim_no!r}: {exc}")
+
+    return result

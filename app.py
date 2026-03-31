@@ -566,17 +566,17 @@ if st.sidebar.button("Download All Charts as ZIP", type="secondary"):
         )
 
         with st.spinner("Rendering charts\u2026"):
-            _png_dict = batch_export_all_dims(parsed_files, list(all_dimensions.keys()), _chart_kwargs)
+            _html_dict = batch_export_all_dims(parsed_files, list(all_dimensions.keys()), _chart_kwargs)
 
         # Build ZIP in memory
         _zip_buf = _zip_io.BytesIO()
         with zipfile.ZipFile(_zip_buf, "w", zipfile.ZIP_DEFLATED) as _zf:
-            for _dno, _png_bytes in _png_dict.items():
-                _zf.writestr(f"{_dno}.png", _png_bytes)
+            for _dno, _html_bytes in _html_dict.items():
+                _zf.writestr(f"{_dno}.html", _html_bytes)
         _zip_buf.seek(0)
 
         st.sidebar.download_button(
-            label=f"Save ZIP ({len(_png_dict)} charts)",
+            label=f"Save ZIP ({len(_html_dict)} charts)",
             data=_zip_buf,
             file_name="spc_charts.zip",
             mime="application/zip",

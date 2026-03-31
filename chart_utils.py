@@ -1205,36 +1205,18 @@ def cusum_analysis(data_series, target=None, h=5.0, k=0.5):
 # Render / export helpers
 # ---------------------------------------------------------------------------
 
-def render_chart_to_png(fig, width: int = 1400, height: int = 700) -> bytes:
-    """Render a Plotly figure to PNG bytes using kaleido.
+def render_chart_to_html(fig) -> bytes:
+    """Render a Plotly figure to a self-contained HTML file (UTF-8 bytes).
 
-    Parameters
-    ----------
-    fig : plotly.graph_objects.Figure
-    width : int
-        Output image width in pixels (default 1400).
-    height : int
-        Output image height in pixels (default 700).
+    No extra dependencies required — uses plotly's built-in HTML export.
+    The resulting file opens in any browser and is fully interactive.
 
     Returns
     -------
     bytes
-        Raw PNG image bytes.
-
-    Raises
-    ------
-    ImportError
-        If the kaleido package is not installed.
+        UTF-8 encoded HTML bytes suitable for writing into a ZIP archive.
     """
-    try:
-        return fig.to_image(format="png", width=width, height=height, engine="kaleido")
-    except ValueError as exc:
-        # kaleido raises ValueError when the engine is not available
-        if "kaleido" in str(exc).lower() or "engine" in str(exc).lower():
-            raise ImportError(
-                "kaleido is required for PNG export: pip install kaleido"
-            ) from exc
-        raise
+    return fig.to_html(full_html=True, include_plotlyjs="cdn").encode("utf-8")
 
 
 def batch_export_all_dims(
@@ -1242,12 +1224,12 @@ def batch_export_all_dims(
     dim_nos: list,
     chart_kwargs: dict,
 ) -> dict:
-    """Export every requested dimension as a PNG and return a mapping of dim_no → bytes.
+    """Export every requested dimension as an interactive HTML file.
 
     Parameters
     ----------
     parsed_files : list
-        List of ParsedFile dicts (same format used throughout chart_utils).
+        List of ParsedFile objects (same format used throughout chart_utils).
     dim_nos : list[str]
         Dimension names to export, e.g. ``["SPC_AT", "SPC_AU", "SPC_AV"]``.
     chart_kwargs : dict
@@ -1257,9 +1239,8 @@ def batch_export_all_dims(
     Returns
     -------
     dict[str, bytes]
-        Mapping of dimension name → PNG bytes.  Dimensions that fail for any
-        reason are skipped (an error is printed to stdout) so that a single
-        bad dimension does not abort the entire export.
+        Mapping of dimension name → UTF-8 HTML bytes.  Dimensions that fail
+        for any reason are skipped so one bad dimension won't abort the rest.
     """
     result: dict = {}
 
@@ -1271,8 +1252,7 @@ def batch_export_all_dims(
                 continue
 
             fig = build_combined_chart(df, dim_metas, [dim_no], **chart_kwargs)
-            png_bytes = render_chart_to_png(fig)
-            result[dim_no] = png_bytes
+            result[dim_no] = render_chart_to_html(fig)
         except Exception as exc:  # noqa: BLE001
             print(f"[batch_export] Error exporting {dim_no!r}: {exc}")
 

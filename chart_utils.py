@@ -4,6 +4,7 @@ Extracted from app.py so both the main app and the Quick Test page
 can share the same logic without duplication.
 """
 
+import re
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
@@ -57,7 +58,6 @@ def _find_matching_dim(pf_dims, target_dno):
 
     # Strip trailing dash-number suffix for fuzzy matching
     # e.g. "SPC_A-1" base is "SPC_A", "SPC_A" base is "SPC_A"
-    import re
     target_base = re.sub(r'-\d+$', '', target_dno)
 
     for candidate_dno, candidate_meta in pf_dims.items():
@@ -113,14 +113,8 @@ def prepare_combined_data(parsed_files, dim_nos):
                     if local_label in df.columns and local_label != canon_label:
                         rename_map[local_label] = canon_label
 
-            # Use canonical labels for column selection
-            target_meta = canonical_meta if canonical_meta else local_meta
-            meas_cols.extend([c for c in target_meta.col_labels if c in df.columns])
-
-            # Also include local labels that will be renamed
-            for local_label in local_meta.col_labels:
-                if local_label in df.columns and local_label in rename_map:
-                    meas_cols.append(local_label)
+            # Always add local labels — rename_map will convert them to canonical names later
+            meas_cols.extend([c for c in local_meta.col_labels if c in df.columns])
 
         # Deduplicate while preserving order
         seen = set()
@@ -383,23 +377,6 @@ def build_combined_chart(
         fig.add_vline(x=bx, line=dict(color="rgba(100,116,139,0.5)", width=1.5, dash="solid"))
 
     annotations = []
-
-    # Section label annotations at the top of each section
-    if section_by_fields and unique_sections:
-        for sec_label, (sx, ex) in section_x_ranges.items():
-            mid_x = (sx + ex) / 2
-            annotations.append(dict(
-                x=mid_x, y=1.0,
-                xref="x", yref="paper",
-                text=f"<b>{sec_label}</b>",
-                showarrow=False,
-                font=dict(size=11, color="#334155"),
-                bgcolor="rgba(241,245,249,0.85)",
-                bordercolor="rgba(148,163,184,0.4)",
-                borderwidth=1,
-                borderpad=3,
-                yanchor="bottom",
-            ))
 
     is_group = len(dim_nos) > 1
     if is_group:

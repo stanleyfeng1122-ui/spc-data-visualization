@@ -323,6 +323,11 @@ def build_combined_chart(
 
                     step = max(1, n_parts // MAX_TRACES_PER_GROUP)
 
+                    # Single-point dimensions (e.g. flatness) need markers;
+                    # scattergl lines with 1 point render nothing.
+                    is_single_point = len(x_positions) == 1
+                    trace_mode = "markers" if is_single_point else "lines"
+
                     for ri in range(0, n_parts, step):
                         y_vals = pd.to_numeric(grp_df.iloc[ri], errors="coerce").values.copy()
                         if deviation_mode:
@@ -331,11 +336,10 @@ def build_combined_chart(
                         show_legend = grp_name not in legend_shown
                         legend_shown.add(grp_name)
 
-                        trace = go.Scattergl(
+                        trace_kwargs = dict(
                             x=x_positions,
                             y=y_vals,
-                            mode="lines",
-                            line=dict(width=0.7, color=color),
+                            mode=trace_mode,
                             opacity=0.45,
                             name=grp_name,
                             legendgroup=grp_name,
@@ -350,6 +354,12 @@ def build_combined_chart(
                             ),
                             text=[pn for pn in point_nums],
                         )
+                        if is_single_point:
+                            trace_kwargs["marker"] = dict(size=6, color=color)
+                        else:
+                            trace_kwargs["line"] = dict(width=0.7, color=color)
+
+                        trace = go.Scattergl(**trace_kwargs)
                         if use_row_facets:
                             fig.add_trace(trace, row=plotly_row, col=1)
                         else:

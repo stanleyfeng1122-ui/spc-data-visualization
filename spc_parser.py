@@ -160,24 +160,38 @@ def _scan_label_rows(rows, label_col, start_row, end_row):
 def _find_data_start(rows, label_col, data_col_start, after_row, max_search=60):
     """
     Find where measurement data rows begin by looking for:
-    1. A header row containing "Start Point" or "SN" in any column
+    1. A header row containing "Start Point", "SN", or "NO" in the label column,
+       or a row with multiple text headers in the pre-data columns
     2. First row after metadata with numeric values in data columns
     Returns (header_row_1based_or_None, data_start_row_1based).
     """
-    # Strategy 1: look for "Start Point" or "SN" text in the label area
-    # Search up to label_col+1 to cover layouts where headers are in the label column
-    search_col_limit = max(15, label_col + 1)
+    # Known header indicators at the label column position
+    _HEADER_KEYWORDS = {"start point", "sn", "no", "no."}
+
+    # Strategy 1a: look for known header keywords in the label area
+    _search_cols = max(label_col + 1, 20)
     for ri in range(after_row - 1, min(after_row + max_search, len(rows))):
         row = rows[ri]
-        for ci in range(min(search_col_limit, len(row))):
+        for ci in range(min(_search_cols, len(row))):
             val = row[ci].value
             if val is None:
                 continue
             s = str(val).strip().lower()
-            if s == "start point":
+            if s in _HEADER_KEYWORDS:
                 return ri + 1, ri + 2  # header row, data starts next row
-            if s == "sn":
-                return ri + 1, ri + 2
+
+    # Strategy 1b: look for a row with multiple text values before data_col_start.
+    # A row with 3+ non-numeric text cells in the metadata area is almost
+    # certainly a header row (e.g. "Build | CFG | Color | ... | NO").
+    for ri in range(after_row - 1, min(after_row + max_search, len(rows))):
+        row = rows[ri]
+        text_count = 0
+        for ci in range(min(data_col_start, len(row))):
+            val = row[ci].value
+            if val is not None and isinstance(val, str) and val.strip():
+                text_count += 1
+        if text_count >= 3:
+            return ri + 1, ri + 2
 
     # Strategy 2: find first row with numeric data in dimension columns
     for ri in range(after_row - 1, min(after_row + max_search, len(rows))):
@@ -375,24 +389,16 @@ def _parse_single_sheet(wb, sheet_name: str, sheet_rows: list,
 
         col_labels = []
         point_numbers = []
-        _label_counts: dict = {}  # track duplicates for unique col_labels
         for idx, ci in enumerate(cols):
             pt = col_point.get(ci, "")
             if pt:
                 point_numbers.append(pt)
-                candidate = f"{dno}_{pt}"
+                col_labels.append(f"{dno}_{pt}")
             else:
                 # Synthesize point label: P0, P1, P2, ...
                 syn_pt = f"P{idx}"
                 point_numbers.append(syn_pt)
-                candidate = f"{dno}_{syn_pt}"
-            # Ensure unique col_labels (Data Input sheets repeat point numbers)
-            if candidate in _label_counts:
-                _label_counts[candidate] += 1
-                col_labels.append(f"{candidate}_{_label_counts[candidate]}")
-            else:
-                _label_counts[candidate] = 0
-                col_labels.append(candidate)
+                col_labels.append(f"{dno}_{syn_pt}")
 
         result.dimensions[dno] = DimensionMeta(
             dim_no=dno,

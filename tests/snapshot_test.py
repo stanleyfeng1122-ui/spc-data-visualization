@@ -73,9 +73,7 @@ def _render_scenario(scenario: Scenario) -> bytes:
     if df is None or df.empty:
         raise RuntimeError(f"Empty dataframe for {scenario.name}")
     if scenario.dim_no not in dim_metas:
-        raise RuntimeError(
-            f"Dim {scenario.dim_no} not found in {scenario.files}"
-        )
+        raise RuntimeError(f"Dim {scenario.dim_no} not found in {scenario.files}")
 
     common = dict(
         df=df,

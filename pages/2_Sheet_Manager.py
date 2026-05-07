@@ -8,34 +8,45 @@ dimensions are shared, missing, or fuzzy-matched between them.
 import io
 import os
 import sys
-from collections import OrderedDict
 from difflib import SequenceMatcher
 
 import streamlit as st
-import pandas as pd
 
 _project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _project_root not in sys.path:
     sys.path.insert(0, _project_root)
 
-from spc_parser import parse_excel_multi
 from ui_theme import (
-    inject_theme, FONT_MONO, FONT_BODY, FONT_HEADING,
-    TEXT_PRIMARY, TEXT_SECONDARY, TEXT_MUTED,
-    ACCENT, DANGER, SUCCESS, WARNING,
-    WHITE, BG_SUBTLE, BORDER, BORDER_LIGHT,
+    ACCENT,
+    BG_SUBTLE,
+    BORDER,
+    BORDER_LIGHT,
+    DANGER,
+    FONT_BODY,
+    FONT_HEADING,
+    FONT_MONO,
+    SUCCESS,
+    TEXT_MUTED,
+    TEXT_PRIMARY,
+    TEXT_SECONDARY,
+    WARNING,
+    WHITE,
+    inject_theme,
 )
 
 # ---------------------------------------------------------------------------
 # Page config
 # ---------------------------------------------------------------------------
-st.set_page_config(page_title="Sheet Manager — SPC", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(
+    page_title="Sheet Manager — SPC", layout="wide", initial_sidebar_state="collapsed"
+)
 inject_theme()
 
 
 # ===================================================================
 # HELPER FUNCTIONS
 # ===================================================================
+
 
 def scan_sheets(file_bytes: bytes, filename: str) -> list:
     """Lightweight scanner: detect data sheets, count dims/rows, read part#."""
@@ -67,7 +78,11 @@ def scan_sheets(file_bytes: bytes, filename: str) -> list:
         for r in range(1, min(16, max_row + 1)):
             for c in range(1, min(31, scan_col_limit + 1)):
                 v = ws.cell(r, c).value
-                if v and isinstance(v, str) and v.strip().lower().replace(".", "").replace(" ", "") in ("dimno",):
+                if (
+                    v
+                    and isinstance(v, str)
+                    and v.strip().lower().replace(".", "").replace(" ", "") in ("dimno",)
+                ):
                     dim_row = r
                     dim_label_col = c
                     break
@@ -104,16 +119,18 @@ def scan_sheets(file_bytes: bytes, filename: str) -> list:
         header_rows = dim_row + 30
         data_row_estimate = max(0, max_row - header_rows)
 
-        results.append({
-            "filename": filename,
-            "sheet_name": sn,
-            "dim_count": len(unique_dims),
-            "dims_list": unique_dims,
-            "dims_set": set(unique_dims),
-            "data_rows": data_row_estimate,
-            "part_number": part_number,
-            "selected": True,
-        })
+        results.append(
+            {
+                "filename": filename,
+                "sheet_name": sn,
+                "dim_count": len(unique_dims),
+                "dims_list": unique_dims,
+                "dims_set": set(unique_dims),
+                "data_rows": data_row_estimate,
+                "part_number": part_number,
+                "selected": True,
+            }
+        )
 
     wb.close()
     return results
@@ -151,6 +168,7 @@ for uf in uploaded_files:
     uf.seek(0)
     file_bytes_map[uf.name] = raw
 
+
 # ---------------------------------------------------------------------------
 # Scan all sheets
 # ---------------------------------------------------------------------------
@@ -161,6 +179,7 @@ def _scan_all(file_data: dict) -> list:
         infos = scan_sheets(fbytes, fname)
         all_infos.extend(infos)
     return all_infos
+
 
 sheet_infos = _scan_all(file_bytes_map)
 
@@ -180,7 +199,7 @@ def _normalize_dim(name: str) -> str:
     s = name.strip().upper().replace(" ", "")
     for prefix in ("SPC_", "SPC-", "DIM_", "DIM-"):
         if s.startswith(prefix):
-            s = s[len(prefix):]
+            s = s[len(prefix) :]
     return s
 
 
@@ -290,13 +309,15 @@ for dim in dims_all:
         status = "Fuzzy"
     else:
         status = "Missing"
-    table_rows.append({
-        "dim": dim,
-        "in_a": in_a,
-        "in_b": in_b,
-        "status": status,
-        "fuzzy_hint": fuzzy_pairs.get(dim, ""),
-    })
+    table_rows.append(
+        {
+            "dim": dim,
+            "in_a": in_a,
+            "in_b": in_b,
+            "status": status,
+            "fuzzy_hint": fuzzy_pairs.get(dim, ""),
+        }
+    )
 
 _status_order = {"Fuzzy": 0, "Missing": 1, "OK": 2}
 table_rows.sort(key=lambda r: (_status_order.get(r["status"], 9), r["dim"]))
@@ -343,9 +364,11 @@ else:
         if r["in_a"]:
             ca = f"<span style='color:{SUCCESS};'>&#10003;</span>"
         elif r["fuzzy_hint"] and r["fuzzy_hint"] in dims_a:
-            ca = (f"<span style='color:{WARNING};'>&#10007;</span>"
-                  f"<br><span style='font-size:0.62rem;color:{WARNING};"
-                  f"font-family:{FONT_MONO};'>has {r['fuzzy_hint']}</span>")
+            ca = (
+                f"<span style='color:{WARNING};'>&#10007;</span>"
+                f"<br><span style='font-size:0.62rem;color:{WARNING};"
+                f"font-family:{FONT_MONO};'>has {r['fuzzy_hint']}</span>"
+            )
         else:
             ca = f"<span style='color:{DANGER};'>&#10007;</span>"
 
@@ -353,9 +376,11 @@ else:
         if r["in_b"]:
             cb = f"<span style='color:{SUCCESS};'>&#10003;</span>"
         elif r["fuzzy_hint"] and r["fuzzy_hint"] in dims_b:
-            cb = (f"<span style='color:{WARNING};'>&#10007;</span>"
-                  f"<br><span style='font-size:0.62rem;color:{WARNING};"
-                  f"font-family:{FONT_MONO};'>has {r['fuzzy_hint']}</span>")
+            cb = (
+                f"<span style='color:{WARNING};'>&#10007;</span>"
+                f"<br><span style='font-size:0.62rem;color:{WARNING};"
+                f"font-family:{FONT_MONO};'>has {r['fuzzy_hint']}</span>"
+            )
         else:
             cb = f"<span style='color:{DANGER};'>&#10007;</span>"
 

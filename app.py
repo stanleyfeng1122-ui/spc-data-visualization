@@ -14,22 +14,23 @@ Chart model (combined profile view):
   Sections = Factory x Build (e.g. FX P1, FX P2, TRM P1, TRM P2)
 """
 
-import streamlit as st
-import streamlit.components.v1 as components
 from collections import OrderedDict
 
-from spc_parser import parse_excel_multi, _open_workbook
-from ui_theme import inject_theme, TEXT_MUTED
+import streamlit as st
+import streamlit.components.v1 as components
+
 from shared_ui import (
-    build_dimension_selector,
-    build_point_filter,
+    build_and_render_chart,
     build_chart_controls,
     build_color_pickers,
+    build_dimension_selector,
+    build_point_filter,
     prepare_and_clean,
-    build_and_render_chart,
-    render_summary_statistics,
     render_batch_export,
+    render_summary_statistics,
 )
+from spc_parser import _open_workbook, parse_excel_multi
+from ui_theme import inject_theme
 
 # ---------------------------------------------------------------------------
 # Page config
@@ -55,9 +56,7 @@ uploaded_files = st.sidebar.file_uploader(
 
 if not uploaded_files:
     st.title("SPC Data Visualization Tool")
-    st.info(
-        "Upload one or more .xlsx CPK data files using the sidebar to get started."
-    )
+    st.info("Upload one or more .xlsx CPK data files using the sidebar to get started.")
     st.stop()
 
 # ---------------------------------------------------------------------------
@@ -78,9 +77,11 @@ for _uf in uploaded_files:
     with _warnings.catch_warnings():
         _warnings.simplefilter("ignore")
         _wb, _ = _open_workbook(_io.BytesIO(_raw))
-    _sheets = [s for s in _wb.sheetnames
-               if s not in _NON_DATA_EXACT
-               and not any(s.startswith(p) for p in _NON_DATA_PREFIXES)]
+    _sheets = [
+        s
+        for s in _wb.sheetnames
+        if s not in _NON_DATA_EXACT and not any(s.startswith(p) for p in _NON_DATA_PREFIXES)
+    ]
     _file_sheets[_uf.name] = _sheets
 
     for _sn in _sheets:
@@ -137,10 +138,12 @@ with st.sidebar.expander("Sheet / File map", expanded=False):
 # Parse uploaded files
 # ---------------------------------------------------------------------------
 
+
 @st.cache_data(show_spinner="Parsing Excel files...")
 def _parse_file_sheets(file_bytes: bytes, filename: str, sheet_names: tuple) -> list:
     """Parse specific sheets from a file and return list of dicts."""
     import io
+
     results = []
     for sn in sheet_names:
         try:
@@ -148,17 +151,19 @@ def _parse_file_sheets(file_bytes: bytes, filename: str, sheet_names: tuple) -> 
             buf.name = filename
             parsed_list = parse_excel_multi(buf, sheet_name=sn)
             for parsed in parsed_list:
-                results.append({
-                    "filename": parsed.filename,
-                    "sheet_name": parsed.sheet_name,
-                    "part_number": parsed.part_number,
-                    "part_description": parsed.part_description,
-                    "revision": parsed.revision,
-                    "factory": parsed.factory,
-                    "dimensions": parsed.dimensions,
-                    "data": parsed.data,
-                    "meta_columns": parsed.meta_columns,
-                })
+                results.append(
+                    {
+                        "filename": parsed.filename,
+                        "sheet_name": parsed.sheet_name,
+                        "part_number": parsed.part_number,
+                        "part_description": parsed.part_description,
+                        "revision": parsed.revision,
+                        "factory": parsed.factory,
+                        "dimensions": parsed.dimensions,
+                        "data": parsed.data,
+                        "meta_columns": parsed.meta_columns,
+                    }
+                )
         except Exception:
             pass
     return results
@@ -188,7 +193,7 @@ with st.sidebar.expander(f"Loaded Files ({len(parsed_files)})", expanded=False):
         n_rows = len(pf["data"]) if pf["data"] is not None else 0
         n_dims = len(pf["dimensions"])
         factory = pf.get("factory", "?")
-        sheet_label = f" [{pf['sheet_name']}]" if pf.get('sheet_name') else ""
+        sheet_label = f" [{pf['sheet_name']}]" if pf.get("sheet_name") else ""
         meta_info = f"{n_dims} dims, {n_rows} rows"
         if pf["data"] is not None and "CFG" in pf["data"].columns:
             cfgs = ", ".join(sorted(pf["data"]["CFG"].dropna().unique().astype(str)[:5]))
@@ -214,7 +219,9 @@ for pf in parsed_files:
 KP = "main_"  # key prefix
 
 selected_dim_nos, selected_group_label, _ = build_dimension_selector(all_dimensions, key_prefix=KP)
-exclude_intervals, selected_points = build_point_filter(all_dimensions, selected_dim_nos, key_prefix=KP)
+exclude_intervals, selected_points = build_point_filter(
+    all_dimensions, selected_dim_nos, key_prefix=KP
+)
 controls = build_chart_controls(parsed_files, key_prefix=KP)
 
 # ---------------------------------------------------------------------------
@@ -227,9 +234,15 @@ df_clean, dim_metas, _ = prepare_and_clean(parsed_files, selected_dim_nos)
 custom_color_map = build_color_pickers(df_clean, controls["color_by"], key_prefix=KP)
 
 fig = build_and_render_chart(
-    df_clean, dim_metas, selected_dim_nos, controls,
-    custom_color_map, exclude_intervals, selected_group_label,
-    selected_points, key_prefix=KP,
+    df_clean,
+    dim_metas,
+    selected_dim_nos,
+    controls,
+    custom_color_map,
+    exclude_intervals,
+    selected_group_label,
+    selected_points,
+    key_prefix=KP,
 )
 
 # ---------------------------------------------------------------------------
@@ -293,7 +306,9 @@ if controls["chart_type"] == "Combined Profile":
 # Summary Statistics
 # ---------------------------------------------------------------------------
 render_summary_statistics(
-    df_clean, dim_metas, selected_dim_nos,
+    df_clean,
+    dim_metas,
+    selected_dim_nos,
     exclude_intervals=exclude_intervals,
     color_by=controls["color_by"],
     custom_color_map=custom_color_map,
@@ -304,7 +319,11 @@ render_summary_statistics(
 # Batch Chart Export
 # ---------------------------------------------------------------------------
 render_batch_export(
-    all_dimensions, parsed_files, controls,
-    exclude_intervals, selected_points, custom_color_map,
+    all_dimensions,
+    parsed_files,
+    controls,
+    exclude_intervals,
+    selected_points,
+    custom_color_map,
     key_prefix=KP,
 )

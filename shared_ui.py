@@ -7,33 +7,41 @@ Every function takes a *key_prefix* so multiple pages can coexist in the
 same Streamlit session without widget-key collisions.
 """
 
-import streamlit as st
-import pandas as pd
-import numpy as np
-import plotly.graph_objects as go
 from collections import OrderedDict
+
+import numpy as np
+import pandas as pd
+import plotly.graph_objects as go
+import streamlit as st
 from scipy import stats as scipy_stats
 
-from spc_parser import detect_dimension_groups, get_filtered_dim_meta
 from chart_utils import (
-    get_color_for_group,
-    prepare_combined_data,
-    build_combined_chart,
     build_box_plot,
+    build_combined_chart,
     build_histogram,
-    finalize_plotly_style,
     calc_process_capability,
-    nelson_rules,
     cusum_analysis,
+    finalize_plotly_style,
+    get_color_for_group,
+    nelson_rules,
+    prepare_combined_data,
 )
+from spc_parser import detect_dimension_groups, get_filtered_dim_meta
 from ui_theme import (
-    FONT_MONO, TEXT_PRIMARY, TEXT_SECONDARY, TEXT_MUTED,
-    ACCENT, DANGER, SUCCESS, WARNING, WHITE, BORDER,
+    ACCENT,
+    BORDER,
+    DANGER,
+    SUCCESS,
+    TEXT_MUTED,
+    TEXT_PRIMARY,
+    WARNING,
+    WHITE,
 )
 
 # ---------------------------------------------------------------------------
 # 1. Dimension selector (preset groups + multiselect)
 # ---------------------------------------------------------------------------
+
 
 def build_dimension_selector(all_dimensions, key_prefix=""):
     """Render preset + multiselect in the sidebar, return selected dim numbers.
@@ -57,7 +65,10 @@ def build_dimension_selector(all_dimensions, key_prefix=""):
     st.sidebar.markdown("---")
     group_options = ["Custom"] + list(dim_groups.keys())
     selected_preset = st.sidebar.selectbox(
-        "Preset", options=group_options, index=0, key=f"{key_prefix}preset",
+        "Preset",
+        options=group_options,
+        index=0,
+        key=f"{key_prefix}preset",
     )
 
     if selected_preset != "Custom":
@@ -67,13 +78,14 @@ def build_dimension_selector(all_dimensions, key_prefix=""):
         default_labels = [dim_display_labels[0]] if dim_display_labels else []
 
     selected_dim_labels = st.sidebar.multiselect(
-        "Dimensions", options=dim_display_labels, default=default_labels,
+        "Dimensions",
+        options=dim_display_labels,
+        default=default_labels,
         key=f"{key_prefix}dims",
     )
     selected_dim_nos = [dim_display_map[lbl] for lbl in selected_dim_labels]
     selected_group_label = (
-        " / ".join(dno.replace("SPC_", "") for dno in selected_dim_nos)
-        if selected_dim_nos else ""
+        " / ".join(dno.replace("SPC_", "") for dno in selected_dim_nos) if selected_dim_nos else ""
     )
 
     if not selected_dim_nos:
@@ -87,10 +99,13 @@ def build_dimension_selector(all_dimensions, key_prefix=""):
 # 2. Point filter
 # ---------------------------------------------------------------------------
 
+
 def build_point_filter(all_dimensions, selected_dim_nos, key_prefix=""):
     """Render exclude-points controls. Returns (exclude_intervals, selected_points)."""
     exclude_intervals = st.sidebar.checkbox(
-        "Exclude interval points", value=True, key=f"{key_prefix}excl",
+        "Exclude interval points",
+        value=True,
+        key=f"{key_prefix}excl",
     )
 
     all_point_numbers = []
@@ -103,7 +118,9 @@ def build_point_filter(all_dimensions, selected_dim_nos, key_prefix=""):
                     all_point_numbers.append(pn)
 
     excluded_points = st.sidebar.multiselect(
-        "Exclude points", options=all_point_numbers, default=[],
+        "Exclude points",
+        options=all_point_numbers,
+        default=[],
         help="Pick points to hide. Empty = show all.",
         key=f"{key_prefix}points",
     )
@@ -124,7 +141,14 @@ def build_point_filter(all_dimensions, selected_dim_nos, key_prefix=""):
 _CHART_LABELS = ["Profile", "Box Plot", "Histogram"]
 _CHART_MAP = {"Profile": "Combined Profile", "Box Plot": "Box Plot", "Histogram": "Histogram"}
 
-SECTION_FIELDS = ["Factory", "Build", "Config", "Raw material", "Vendor Serial Number", "Source File"]
+SECTION_FIELDS = [
+    "Factory",
+    "Build",
+    "Config",
+    "Raw material",
+    "Vendor Serial Number",
+    "Source File",
+]
 
 
 def build_chart_controls(parsed_files, key_prefix=""):
@@ -135,7 +159,10 @@ def build_chart_controls(parsed_files, key_prefix=""):
     """
     st.sidebar.markdown("---")
     chart_label = st.sidebar.radio(
-        "Chart type", options=_CHART_LABELS, index=0, horizontal=True,
+        "Chart type",
+        options=_CHART_LABELS,
+        index=0,
+        horizontal=True,
         key=f"{key_prefix}chart_type",
     )
     chart_type = _CHART_MAP[chart_label]
@@ -152,7 +179,8 @@ def build_chart_controls(parsed_files, key_prefix=""):
     meta_list = sorted(available_meta)
     groupby_options = [m for m in meta_list if m not in ("Start Point", "SN")] + ["None"]
     color_by = st.sidebar.selectbox(
-        "Color-by", options=groupby_options,
+        "Color-by",
+        options=groupby_options,
         index=len(groupby_options) - 1,
         key=f"{key_prefix}color",
     )
@@ -161,7 +189,8 @@ def build_chart_controls(parsed_files, key_prefix=""):
         section_options = [m for m in meta_list if m not in ("Start Point", "SN")]
         section_options += [s for s in ("Factory", "Source File") if s not in section_options]
         section_by_fields = st.sidebar.multiselect(
-            "Section-by", options=section_options,
+            "Section-by",
+            options=section_options,
             default=["Factory"] if "Factory" in section_options else [],
             key=f"{key_prefix}section",
         )
@@ -170,15 +199,18 @@ def build_chart_controls(parsed_files, key_prefix=""):
 
     rowby_options = [m for m in meta_list if m not in ("Start Point", "SN")] + ["None"]
     row_by = st.sidebar.selectbox(
-        "Row-by", options=rowby_options,
+        "Row-by",
+        options=rowby_options,
         index=len(rowby_options) - 1,
         key=f"{key_prefix}row",
     )
 
     if chart_type in ("Combined Profile", "Box Plot"):
         y_axis_mode = st.sidebar.selectbox(
-            "Y-axis", options=["Measurement values", "Deviation from Nominal"],
-            index=0, key=f"{key_prefix}yaxis",
+            "Y-axis",
+            options=["Measurement values", "Deviation from Nominal"],
+            index=0,
+            key=f"{key_prefix}yaxis",
         )
     else:
         y_axis_mode = "Measurement values"
@@ -213,6 +245,7 @@ def build_chart_controls(parsed_files, key_prefix=""):
 # 4. Color pickers
 # ---------------------------------------------------------------------------
 
+
 def build_color_pickers(df_clean, color_by, key_prefix=""):
     """Render per-group color pickers. Returns custom_color_map dict."""
     st.sidebar.markdown("---")
@@ -226,7 +259,9 @@ def build_color_pickers(df_clean, color_by, key_prefix=""):
     for i, grp in enumerate(groups):
         default_color = get_color_for_group(i)
         custom_color_map[grp] = st.sidebar.color_picker(
-            f"{grp}", value=default_color, key=f"{key_prefix}color_{grp}",
+            f"{grp}",
+            value=default_color,
+            key=f"{key_prefix}color_{grp}",
         )
     return custom_color_map
 
@@ -234,6 +269,7 @@ def build_color_pickers(df_clean, color_by, key_prefix=""):
 # ---------------------------------------------------------------------------
 # 5. Data preparation
 # ---------------------------------------------------------------------------
+
 
 def prepare_and_clean(parsed_files, selected_dim_nos):
     """Combine data and drop all-NaN rows. Returns (df_clean, dim_metas, all_meas_cols)."""
@@ -247,7 +283,9 @@ def prepare_and_clean(parsed_files, selected_dim_nos):
         if dno in dim_metas:
             all_meas_cols.extend([c for c in dim_metas[dno].col_labels if c in df.columns])
 
-    df_clean = df.dropna(subset=all_meas_cols, how="all").reset_index(drop=True) if all_meas_cols else df
+    df_clean = (
+        df.dropna(subset=all_meas_cols, how="all").reset_index(drop=True) if all_meas_cols else df
+    )
     if df_clean.empty:
         st.warning("No measurement data for selected dimensions.")
         st.stop()
@@ -259,16 +297,26 @@ def prepare_and_clean(parsed_files, selected_dim_nos):
 # 6. Chart building + rendering
 # ---------------------------------------------------------------------------
 
-def _build_chart_figure(df_clean, dim_metas, selected_dim_nos, controls,
-                        custom_color_map, exclude_intervals, selected_group_label,
-                        selected_points):
+
+def _build_chart_figure(
+    df_clean,
+    dim_metas,
+    selected_dim_nos,
+    controls,
+    custom_color_map,
+    exclude_intervals,
+    selected_group_label,
+    selected_points,
+):
     """Build a Plotly Figure from controls without rendering it.
 
     Returns the finalised Figure, or None when data is insufficient.
     """
     ct = controls["chart_type"]
     common = dict(
-        df=df_clean, dim_metas=dim_metas, dim_nos=selected_dim_nos,
+        df=df_clean,
+        dim_metas=dim_metas,
+        dim_nos=selected_dim_nos,
         color_by=controls["color_by"],
         exclude_intervals=exclude_intervals,
         group_label=selected_group_label,
@@ -303,13 +351,26 @@ def _build_chart_figure(df_clean, dim_metas, selected_dim_nos, controls,
     return fig
 
 
-def build_and_render_chart(df_clean, dim_metas, selected_dim_nos, controls,
-                           custom_color_map, exclude_intervals, selected_group_label,
-                           selected_points, key_prefix=""):
+def build_and_render_chart(
+    df_clean,
+    dim_metas,
+    selected_dim_nos,
+    controls,
+    custom_color_map,
+    exclude_intervals,
+    selected_group_label,
+    selected_points,
+    key_prefix="",
+):
     """Build the Plotly figure based on controls dict and render it."""
     fig = _build_chart_figure(
-        df_clean, dim_metas, selected_dim_nos, controls,
-        custom_color_map, exclude_intervals, selected_group_label,
+        df_clean,
+        dim_metas,
+        selected_dim_nos,
+        controls,
+        custom_color_map,
+        exclude_intervals,
+        selected_group_label,
         selected_points,
     )
 
@@ -324,6 +385,7 @@ def build_and_render_chart(df_clean, dim_metas, selected_dim_nos, controls,
 # ---------------------------------------------------------------------------
 # 7. Capability card
 # ---------------------------------------------------------------------------
+
 
 def render_capability_card(cap):
     """Render process capability metrics in a dense grid."""
@@ -387,9 +449,16 @@ def render_capability_card(cap):
 # 8. Summary Statistics expander (Capability + ANOVA + Trend/CUSUM/EWMA)
 # ---------------------------------------------------------------------------
 
-def render_summary_statistics(df_clean, dim_metas, selected_dim_nos,
-                              exclude_intervals, color_by, custom_color_map,
-                              key_prefix=""):
+
+def render_summary_statistics(
+    df_clean,
+    dim_metas,
+    selected_dim_nos,
+    exclude_intervals,
+    color_by,
+    custom_color_map,
+    key_prefix="",
+):
     """Render the full Summary Statistics expander with 3 tabs per dimension."""
     with st.expander("Summary Statistics", expanded=True):
         for dno in selected_dim_nos:
@@ -424,20 +493,28 @@ def render_summary_statistics(df_clean, dim_metas, selected_dim_nos,
             all_values = df_clean[valid_cols].values.flatten()
             all_values = pd.Series(all_values).dropna()
 
-            tab_cap, tab_anova, tab_trend = st.tabs([
-                "Process Capability", "ANOVA", "Trend / Shift"
-            ])
+            tab_cap, tab_anova, tab_trend = st.tabs(
+                ["Process Capability", "ANOVA", "Trend / Shift"]
+            )
 
             # --- Process Capability ---
             with tab_cap:
-                _render_tab_capability(df_clean, valid_cols, point_nums, usls, lsls,
-                                       usl_val, lsl_val, all_values)
+                _render_tab_capability(
+                    df_clean, valid_cols, point_nums, usls, lsls, usl_val, lsl_val, all_values
+                )
 
             # --- ANOVA ---
             with tab_anova:
-                _render_tab_anova(df_clean, valid_cols, color_by, all_values,
-                                  usl_val, lsl_val, custom_color_map,
-                                  key_prefix=f"{key_prefix}anova_{dno}")
+                _render_tab_anova(
+                    df_clean,
+                    valid_cols,
+                    color_by,
+                    all_values,
+                    usl_val,
+                    lsl_val,
+                    custom_color_map,
+                    key_prefix=f"{key_prefix}anova_{dno}",
+                )
 
             # --- Trend / Shift ---
             with tab_trend:
@@ -451,8 +528,10 @@ def render_summary_statistics(df_clean, dim_metas, selected_dim_nos,
 
 # -- Private tab helpers ----------------------------------------------------
 
-def _render_tab_capability(df_clean, valid_cols, point_nums, usls, lsls,
-                            usl_val, lsl_val, all_values):
+
+def _render_tab_capability(
+    df_clean, valid_cols, point_nums, usls, lsls, usl_val, lsl_val, all_values
+):
     if len(all_values) < 2:
         st.info("Not enough data for process capability.")
         return
@@ -475,15 +554,35 @@ def _render_tab_capability(df_clean, valid_cols, point_nums, usls, lsls,
             pc = calc_process_capability(df_clean[col], col_usl, col_lsl)
             if pc:
                 pt_label = point_nums[ci] if ci < len(point_nums) else col
-                rows.append({"Point": pt_label, **{k: v for k, v in pc.items()
-                              if k in ["mean", "std", "Cp", "Cpk", "Pp", "Ppk",
-                                        "Sigma Level", "DPMO", "Yield %", "OOS Count"]}})
+                rows.append(
+                    {
+                        "Point": pt_label,
+                        **{
+                            k: v
+                            for k, v in pc.items()
+                            if k
+                            in [
+                                "mean",
+                                "std",
+                                "Cp",
+                                "Cpk",
+                                "Pp",
+                                "Ppk",
+                                "Sigma Level",
+                                "DPMO",
+                                "Yield %",
+                                "OOS Count",
+                            ]
+                        },
+                    }
+                )
         if rows:
             st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
 
 
-def _render_tab_anova(df_clean, valid_cols, color_by, all_values,
-                       usl_val, lsl_val, custom_color_map, key_prefix=""):
+def _render_tab_anova(
+    df_clean, valid_cols, color_by, all_values, usl_val, lsl_val, custom_color_map, key_prefix=""
+):
     if color_by == "None" or color_by not in df_clean.columns:
         st.info("Select a Color-by grouping for group comparison.")
         return
@@ -530,19 +629,24 @@ def _render_tab_anova(df_clean, valid_cols, color_by, all_values,
     )
     summary_rows = []
     for g, vals in group_data.items():
-        summary_rows.append({
-            "Group": g, "n": len(vals),
-            "Mean": round(vals.mean(), 6), "Std": round(vals.std(ddof=1), 6),
-            "Min": round(vals.min(), 6), "Max": round(vals.max(), 6),
-            "Range": round(vals.max() - vals.min(), 6),
-        })
+        summary_rows.append(
+            {
+                "Group": g,
+                "n": len(vals),
+                "Mean": round(vals.mean(), 6),
+                "Std": round(vals.std(ddof=1), 6),
+                "Min": round(vals.min(), 6),
+                "Max": round(vals.max(), 6),
+                "Range": round(vals.max() - vals.min(), 6),
+            }
+        )
     st.dataframe(pd.DataFrame(summary_rows), use_container_width=True, hide_index=True)
 
     grand_mean = all_values.mean()
-    ss_between = sum(len(group_data[g]) * (group_data[g].mean() - grand_mean) ** 2
-                     for g in group_data)
-    ss_within = sum(((group_data[g] - group_data[g].mean()) ** 2).sum()
-                    for g in group_data)
+    ss_between = sum(
+        len(group_data[g]) * (group_data[g].mean() - grand_mean) ** 2 for g in group_data
+    )
+    ss_within = sum(((group_data[g] - group_data[g].mean()) ** 2).sum() for g in group_data)
     ss_total = ss_between + ss_within
     if ss_total > 0:
         var_cols = st.columns(3)
@@ -554,14 +658,18 @@ def _render_tab_anova(df_clean, valid_cols, color_by, all_values,
     fig_box = go.Figure()
     for g in unique_groups:
         if g in group_data:
-            fig_box.add_trace(go.Box(
-                y=group_data[g].values, name=g,
-                marker_color=custom_color_map.get(g, ACCENT),
-                boxmean="sd",
-            ))
+            fig_box.add_trace(
+                go.Box(
+                    y=group_data[g].values,
+                    name=g,
+                    marker_color=custom_color_map.get(g, ACCENT),
+                    boxmean="sd",
+                )
+            )
     fig_box.update_layout(
         yaxis_title="Value",
-        paper_bgcolor=WHITE, plot_bgcolor=WHITE,
+        paper_bgcolor=WHITE,
+        plot_bgcolor=WHITE,
         font=dict(color=TEXT_PRIMARY, family="IBM Plex Sans, sans-serif"),
         height=300,
         margin=dict(l=40, r=20, t=30, b=40),
@@ -569,11 +677,13 @@ def _render_tab_anova(df_clean, valid_cols, color_by, all_values,
         yaxis=dict(linecolor=BORDER, linewidth=1, gridcolor="#F0F0F0"),
     )
     if usl_val is not None:
-        fig_box.add_hline(y=usl_val, line_dash="dash", line_color=DANGER,
-                          annotation_text=f"USL {usl_val:.4g}")
+        fig_box.add_hline(
+            y=usl_val, line_dash="dash", line_color=DANGER, annotation_text=f"USL {usl_val:.4g}"
+        )
     if lsl_val is not None:
-        fig_box.add_hline(y=lsl_val, line_dash="dash", line_color=DANGER,
-                          annotation_text=f"LSL {lsl_val:.4g}")
+        fig_box.add_hline(
+            y=lsl_val, line_dash="dash", line_color=DANGER, annotation_text=f"LSL {lsl_val:.4g}"
+        )
     st.plotly_chart(fig_box, use_container_width=True, key=f"{key_prefix}_box")
 
 
@@ -604,10 +714,13 @@ def _render_tab_trend(all_values, nom_val, key_prefix=""):
             )
         viol_rows = []
         for rule_name, indices in violations.items():
-            viol_rows.append({
-                "Rule": rule_name, "Violations": len(indices),
-                "Indices": str(indices[:20]) + ("..." if len(indices) > 20 else ""),
-            })
+            viol_rows.append(
+                {
+                    "Rule": rule_name,
+                    "Violations": len(indices),
+                    "Indices": str(indices[:20]) + ("..." if len(indices) > 20 else ""),
+                }
+            )
         st.dataframe(pd.DataFrame(viol_rows), use_container_width=True, hide_index=True)
 
     # CUSUM
@@ -621,24 +734,43 @@ def _render_tab_trend(all_values, nom_val, key_prefix=""):
     if cusum_pos is not None:
         fig_cusum = go.Figure()
         x_idx = list(range(len(cusum_pos)))
-        fig_cusum.add_trace(go.Scatter(x=x_idx, y=cusum_pos, mode="lines", name="CUSUM+",
-                                        line=dict(color=ACCENT, width=1.5)))
-        fig_cusum.add_trace(go.Scatter(x=x_idx, y=cusum_neg, mode="lines", name="CUSUM−",
-                                        line=dict(color=DANGER, width=1.5)))
-        fig_cusum.add_hline(y=5.0, line_dash="dash", line_color=TEXT_MUTED,
-                            annotation_text="h=5")
+        fig_cusum.add_trace(
+            go.Scatter(
+                x=x_idx,
+                y=cusum_pos,
+                mode="lines",
+                name="CUSUM+",
+                line=dict(color=ACCENT, width=1.5),
+            )
+        )
+        fig_cusum.add_trace(
+            go.Scatter(
+                x=x_idx,
+                y=cusum_neg,
+                mode="lines",
+                name="CUSUM−",
+                line=dict(color=DANGER, width=1.5),
+            )
+        )
+        fig_cusum.add_hline(y=5.0, line_dash="dash", line_color=TEXT_MUTED, annotation_text="h=5")
         if shift_pts:
-            fig_cusum.add_trace(go.Scatter(
-                x=shift_pts,
-                y=[max(cusum_pos[i], cusum_neg[i]) for i in shift_pts],
-                mode="markers", name="Shift",
-                marker=dict(color=DANGER, size=6, symbol="x"),
-            ))
+            fig_cusum.add_trace(
+                go.Scatter(
+                    x=shift_pts,
+                    y=[max(cusum_pos[i], cusum_neg[i]) for i in shift_pts],
+                    mode="markers",
+                    name="Shift",
+                    marker=dict(color=DANGER, size=6, symbol="x"),
+                )
+            )
         fig_cusum.update_layout(
-            xaxis_title="Observation", yaxis_title="Cumulative Sum",
-            paper_bgcolor=WHITE, plot_bgcolor=WHITE,
+            xaxis_title="Observation",
+            yaxis_title="Cumulative Sum",
+            paper_bgcolor=WHITE,
+            plot_bgcolor=WHITE,
             font=dict(color=TEXT_PRIMARY, family="IBM Plex Sans, sans-serif"),
-            height=250, margin=dict(l=40, r=20, t=20, b=40),
+            height=250,
+            margin=dict(l=40, r=20, t=20, b=40),
             xaxis=dict(linecolor=BORDER, linewidth=1, gridcolor="#F0F0F0"),
             yaxis=dict(linecolor=BORDER, linewidth=1, gridcolor="#F0F0F0"),
         )
@@ -665,37 +797,66 @@ def _render_tab_trend(all_values, nom_val, key_prefix=""):
         ewma[i] = lam * all_values.iloc[i] + (1 - lam) * ewma[i - 1]
     overall_mean = all_values.mean()
     overall_std = all_values.std(ddof=1)
-    ewma_ucl = np.array([
-        overall_mean + 3 * overall_std * np.sqrt(lam / (2 - lam) * (1 - (1 - lam) ** (2 * (i + 1))))
-        for i in range(len(all_values))
-    ])
-    ewma_lcl = np.array([
-        overall_mean - 3 * overall_std * np.sqrt(lam / (2 - lam) * (1 - (1 - lam) ** (2 * (i + 1))))
-        for i in range(len(all_values))
-    ])
+    ewma_ucl = np.array(
+        [
+            overall_mean
+            + 3 * overall_std * np.sqrt(lam / (2 - lam) * (1 - (1 - lam) ** (2 * (i + 1))))
+            for i in range(len(all_values))
+        ]
+    )
+    ewma_lcl = np.array(
+        [
+            overall_mean
+            - 3 * overall_std * np.sqrt(lam / (2 - lam) * (1 - (1 - lam) ** (2 * (i + 1))))
+            for i in range(len(all_values))
+        ]
+    )
 
     fig_ewma = go.Figure()
     x_idx = list(range(len(ewma)))
-    fig_ewma.add_trace(go.Scatter(x=x_idx, y=ewma, mode="lines", name="EWMA",
-                                    line=dict(color=ACCENT, width=2)))
-    fig_ewma.add_trace(go.Scatter(x=x_idx, y=ewma_ucl, mode="lines", name="UCL",
-                                    line=dict(color=DANGER, dash="dash", width=1)))
-    fig_ewma.add_trace(go.Scatter(x=x_idx, y=ewma_lcl, mode="lines", name="LCL",
-                                    line=dict(color=DANGER, dash="dash", width=1)))
-    fig_ewma.add_hline(y=overall_mean, line_dash="dot", line_color=TEXT_MUTED,
-                        annotation_text="Center")
+    fig_ewma.add_trace(
+        go.Scatter(x=x_idx, y=ewma, mode="lines", name="EWMA", line=dict(color=ACCENT, width=2))
+    )
+    fig_ewma.add_trace(
+        go.Scatter(
+            x=x_idx,
+            y=ewma_ucl,
+            mode="lines",
+            name="UCL",
+            line=dict(color=DANGER, dash="dash", width=1),
+        )
+    )
+    fig_ewma.add_trace(
+        go.Scatter(
+            x=x_idx,
+            y=ewma_lcl,
+            mode="lines",
+            name="LCL",
+            line=dict(color=DANGER, dash="dash", width=1),
+        )
+    )
+    fig_ewma.add_hline(
+        y=overall_mean, line_dash="dot", line_color=TEXT_MUTED, annotation_text="Center"
+    )
     ooc_ewma = [i for i in range(len(ewma)) if ewma[i] > ewma_ucl[i] or ewma[i] < ewma_lcl[i]]
     if ooc_ewma:
-        fig_ewma.add_trace(go.Scatter(
-            x=ooc_ewma, y=[ewma[i] for i in ooc_ewma],
-            mode="markers", name="OOC",
-            marker=dict(color=DANGER, size=6, symbol="x"),
-        ))
+        fig_ewma.add_trace(
+            go.Scatter(
+                x=ooc_ewma,
+                y=[ewma[i] for i in ooc_ewma],
+                mode="markers",
+                name="OOC",
+                marker=dict(color=DANGER, size=6, symbol="x"),
+            )
+        )
     fig_ewma.update_layout(
-        xaxis_title="Observation", yaxis_title="EWMA",
-        paper_bgcolor=WHITE, plot_bgcolor=WHITE,
+        xaxis_title="Observation",
+        yaxis_title="EWMA",
+        paper_bgcolor=WHITE,
+        plot_bgcolor=WHITE,
         font=dict(color=TEXT_PRIMARY, family="IBM Plex Sans, sans-serif"),
-        height=250, margin=dict(l=40, r=20, t=20, b=40),
+        height=250,
+        margin=dict(l=40, r=20, t=20, b=40),
         xaxis=dict(linecolor=BORDER, linewidth=1, gridcolor="#F0F0F0"),
         yaxis=dict(linecolor=BORDER, linewidth=1, gridcolor="#F0F0F0"),
     )
@@ -713,6 +874,7 @@ def _render_tab_trend(all_values, nom_val, key_prefix=""):
 # 9. Batch chart export
 # ---------------------------------------------------------------------------
 
+
 def render_batch_export(
     all_dimensions: OrderedDict,
     parsed_files: list,
@@ -726,6 +888,7 @@ def render_batch_export(
     import io
     import re
     import zipfile
+
     from streamlit.runtime.scriptrunner import StopException
 
     dim_display_map = OrderedDict()
@@ -781,8 +944,13 @@ def render_batch_export(
             group_label = f"{dno.replace('SPC_', '')} — {desc}" if desc else dno
 
             fig = _build_chart_figure(
-                df_clean, dim_metas, [dno], controls,
-                custom_color_map, exclude_intervals, group_label,
+                df_clean,
+                dim_metas,
+                [dno],
+                controls,
+                custom_color_map,
+                exclude_intervals,
+                group_label,
                 selected_points,
             )
             if fig is None:
@@ -792,14 +960,21 @@ def render_batch_export(
             # Convert to PNG
             try:
                 png_bytes = fig.to_image(
-                    format="png", width=1400, height=700, scale=2,
+                    format="png",
+                    width=1400,
+                    height=700,
+                    scale=2,
                 )
             except Exception as e:
                 skipped.append(f"{dno} (image error: {e})")
                 continue
 
-            safe_desc = re.sub(r'[^\w\s-]', '', desc).strip().replace(' ', '_')
-            fname = f"{ct.replace(' ', '_')}_{dno}_{safe_desc}.png" if safe_desc else f"{ct.replace(' ', '_')}_{dno}.png"
+            safe_desc = re.sub(r"[^\w\s-]", "", desc).strip().replace(" ", "_")
+            fname = (
+                f"{ct.replace(' ', '_')}_{dno}_{safe_desc}.png"
+                if safe_desc
+                else f"{ct.replace(' ', '_')}_{dno}.png"
+            )
             images.append((fname, png_bytes))
 
         progress.progress(1.0, text="Done!")

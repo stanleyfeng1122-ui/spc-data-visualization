@@ -8,33 +8,38 @@ They call chart_utils and shared_ui functions directly with synthetic data
 to verify trace structure, spec limits, modes, and batch export plumbing.
 """
 
-import sys
 import os
-import io
-import zipfile
+import sys
+from collections import OrderedDict
+
 import numpy as np
 import pandas as pd
 import pytest
-from collections import OrderedDict
 
 # Ensure project root is importable
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from spc_parser import DimensionMeta
 from chart_utils import (
-    build_combined_chart,
     build_box_plot,
+    build_combined_chart,
     build_histogram,
     finalize_plotly_style,
 )
-
+from spc_parser import DimensionMeta
 
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
 
-def _make_dim_meta(dim_no: str, description: str, n_points: int,
-                   nominal: float = 0.0, usl: float = 1.0, lsl: float = -1.0):
+
+def _make_dim_meta(
+    dim_no: str,
+    description: str,
+    n_points: int,
+    nominal: float = 0.0,
+    usl: float = 1.0,
+    lsl: float = -1.0,
+):
     """Helper to create a DimensionMeta with n_points measurement columns."""
     cols = [f"{dim_no}_P{i}" for i in range(n_points)]
     return cols, DimensionMeta(
@@ -91,26 +96,31 @@ def common_kwargs():
 # 1. Server Health — imports work
 # ---------------------------------------------------------------------------
 
+
 class TestImports:
     def test_shared_ui_imports(self):
         import shared_ui
+
         assert hasattr(shared_ui, "build_and_render_chart")
         assert hasattr(shared_ui, "_build_chart_figure")
         assert hasattr(shared_ui, "render_batch_export")
 
     def test_chart_utils_imports(self):
         import chart_utils
+
         assert hasattr(chart_utils, "build_combined_chart")
         assert hasattr(chart_utils, "build_box_plot")
         assert hasattr(chart_utils, "build_histogram")
 
     def test_spc_parser_imports(self):
         import spc_parser
+
         assert hasattr(spc_parser, "parse_excel_multi")
         assert hasattr(spc_parser, "DimensionMeta")
 
     def test_kaleido_available(self):
         import kaleido
+
         # kaleido 1.2+ may not expose __version__ at top level
         assert kaleido is not None
 
@@ -118,6 +128,7 @@ class TestImports:
 # ---------------------------------------------------------------------------
 # 2. Data Loading — local xlsx files parse
 # ---------------------------------------------------------------------------
+
 
 class TestDataLoading:
     def test_xlsx_files_exist(self):
@@ -127,8 +138,11 @@ class TestDataLoading:
 
     def test_parse_first_file(self):
         from spc_parser import parse_excel_multi
+
         root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        xlsx = sorted([f for f in os.listdir(root) if f.endswith(".xlsx") and not f.startswith("~$")])
+        xlsx = sorted(
+            [f for f in os.listdir(root) if f.endswith(".xlsx") and not f.startswith("~$")]
+        )
         fpath = os.path.join(root, xlsx[0])
         results = parse_excel_multi(fpath)
         assert len(results) > 0, "First xlsx parsed to zero results"
@@ -139,11 +153,14 @@ class TestDataLoading:
 # 3. Combined Profile — multi-point
 # ---------------------------------------------------------------------------
 
+
 class TestCombinedProfileMultiPoint:
     def test_returns_figure(self, multi_point_data, common_kwargs):
         df, dim_metas = multi_point_data
         fig = build_combined_chart(
-            df=df, dim_metas=dim_metas, dim_nos=["SPC_HG"],
+            df=df,
+            dim_metas=dim_metas,
+            dim_nos=["SPC_HG"],
             section_by_fields=["Factory"],
             y_axis_mode="Measurement values",
             custom_yrange=None,
@@ -154,7 +171,9 @@ class TestCombinedProfileMultiPoint:
     def test_traces_use_lines_mode(self, multi_point_data, common_kwargs):
         df, dim_metas = multi_point_data
         fig = build_combined_chart(
-            df=df, dim_metas=dim_metas, dim_nos=["SPC_HG"],
+            df=df,
+            dim_metas=dim_metas,
+            dim_nos=["SPC_HG"],
             section_by_fields=["Factory"],
             y_axis_mode="Measurement values",
             custom_yrange=None,
@@ -167,7 +186,9 @@ class TestCombinedProfileMultiPoint:
     def test_traces_have_multiple_x_points(self, multi_point_data, common_kwargs):
         df, dim_metas = multi_point_data
         fig = build_combined_chart(
-            df=df, dim_metas=dim_metas, dim_nos=["SPC_HG"],
+            df=df,
+            dim_metas=dim_metas,
+            dim_nos=["SPC_HG"],
             section_by_fields=["Factory"],
             y_axis_mode="Measurement values",
             custom_yrange=None,
@@ -179,7 +200,9 @@ class TestCombinedProfileMultiPoint:
     def test_has_line_width(self, multi_point_data, common_kwargs):
         df, dim_metas = multi_point_data
         fig = build_combined_chart(
-            df=df, dim_metas=dim_metas, dim_nos=["SPC_HG"],
+            df=df,
+            dim_metas=dim_metas,
+            dim_nos=["SPC_HG"],
             section_by_fields=["Factory"],
             y_axis_mode="Measurement values",
             custom_yrange=None,
@@ -193,11 +216,14 @@ class TestCombinedProfileMultiPoint:
 # 4. Combined Profile — single-point (flatness fix)
 # ---------------------------------------------------------------------------
 
+
 class TestSinglePointFix:
     def test_single_point_uses_markers(self, single_point_data, common_kwargs):
         df, dim_metas = single_point_data
         fig = build_combined_chart(
-            df=df, dim_metas=dim_metas, dim_nos=["SPC_C1"],
+            df=df,
+            dim_metas=dim_metas,
+            dim_nos=["SPC_C1"],
             section_by_fields=["Factory"],
             y_axis_mode="Measurement values",
             custom_yrange=None,
@@ -210,7 +236,9 @@ class TestSinglePointFix:
     def test_single_point_marker_size(self, single_point_data, common_kwargs):
         df, dim_metas = single_point_data
         fig = build_combined_chart(
-            df=df, dim_metas=dim_metas, dim_nos=["SPC_C1"],
+            df=df,
+            dim_metas=dim_metas,
+            dim_nos=["SPC_C1"],
             section_by_fields=["Factory"],
             y_axis_mode="Measurement values",
             custom_yrange=None,
@@ -222,7 +250,9 @@ class TestSinglePointFix:
     def test_single_point_has_one_x(self, single_point_data, common_kwargs):
         df, dim_metas = single_point_data
         fig = build_combined_chart(
-            df=df, dim_metas=dim_metas, dim_nos=["SPC_C1"],
+            df=df,
+            dim_metas=dim_metas,
+            dim_nos=["SPC_C1"],
             section_by_fields=["Factory"],
             y_axis_mode="Measurement values",
             custom_yrange=None,
@@ -236,11 +266,14 @@ class TestSinglePointFix:
 # 5. Spec Limits — USL/LSL lines and tolerance band
 # ---------------------------------------------------------------------------
 
+
 class TestSpecLimits:
     def _build_fig(self, multi_point_data, common_kwargs):
         df, dim_metas = multi_point_data
         fig = build_combined_chart(
-            df=df, dim_metas=dim_metas, dim_nos=["SPC_HG"],
+            df=df,
+            dim_metas=dim_metas,
+            dim_nos=["SPC_HG"],
             section_by_fields=["Factory"],
             y_axis_mode="Measurement values",
             custom_yrange=None,
@@ -266,11 +299,14 @@ class TestSpecLimits:
 # 6. Box Plot
 # ---------------------------------------------------------------------------
 
+
 class TestBoxPlot:
     def test_returns_figure(self, multi_point_data, common_kwargs):
         df, dim_metas = multi_point_data
         fig = build_box_plot(
-            df=df, dim_metas=dim_metas, dim_nos=["SPC_HG"],
+            df=df,
+            dim_metas=dim_metas,
+            dim_nos=["SPC_HG"],
             y_axis_mode="Measurement values",
             custom_yrange=None,
             **common_kwargs,
@@ -280,7 +316,9 @@ class TestBoxPlot:
     def test_has_box_traces(self, multi_point_data, common_kwargs):
         df, dim_metas = multi_point_data
         fig = build_box_plot(
-            df=df, dim_metas=dim_metas, dim_nos=["SPC_HG"],
+            df=df,
+            dim_metas=dim_metas,
+            dim_nos=["SPC_HG"],
             y_axis_mode="Measurement values",
             custom_yrange=None,
             **common_kwargs,
@@ -293,11 +331,14 @@ class TestBoxPlot:
 # 7. Histogram
 # ---------------------------------------------------------------------------
 
+
 class TestHistogram:
     def test_returns_figure(self, multi_point_data, common_kwargs):
         df, dim_metas = multi_point_data
         fig = build_histogram(
-            df=df, dim_metas=dim_metas, dim_nos=["SPC_HG"],
+            df=df,
+            dim_metas=dim_metas,
+            dim_nos=["SPC_HG"],
             nbins=30,
             **common_kwargs,
         )
@@ -306,7 +347,9 @@ class TestHistogram:
     def test_has_histogram_traces(self, multi_point_data, common_kwargs):
         df, dim_metas = multi_point_data
         fig = build_histogram(
-            df=df, dim_metas=dim_metas, dim_nos=["SPC_HG"],
+            df=df,
+            dim_metas=dim_metas,
+            dim_nos=["SPC_HG"],
             nbins=30,
             **common_kwargs,
         )
@@ -318,9 +361,11 @@ class TestHistogram:
 # 8. Batch Export — figure building pipeline
 # ---------------------------------------------------------------------------
 
+
 class TestBatchExport:
     def test_build_chart_figure_combined(self, multi_point_data, common_kwargs):
         from shared_ui import _build_chart_figure
+
         df, dim_metas = multi_point_data
         controls = {
             "chart_type": "Combined Profile",
@@ -332,14 +377,21 @@ class TestBatchExport:
             "hist_nbins": 30,
         }
         fig = _build_chart_figure(
-            df, dim_metas, ["SPC_HG"], controls,
-            None, False, "Test", None,
+            df,
+            dim_metas,
+            ["SPC_HG"],
+            controls,
+            None,
+            False,
+            "Test",
+            None,
         )
         assert fig is not None
         assert len(fig.data) > 0
 
     def test_build_chart_figure_box(self, single_point_data, common_kwargs):
         from shared_ui import _build_chart_figure
+
         df, dim_metas = single_point_data
         controls = {
             "chart_type": "Box Plot",
@@ -351,8 +403,14 @@ class TestBatchExport:
             "hist_nbins": 30,
         }
         fig = _build_chart_figure(
-            df, dim_metas, ["SPC_C1"], controls,
-            None, False, "Test", None,
+            df,
+            dim_metas,
+            ["SPC_C1"],
+            controls,
+            None,
+            False,
+            "Test",
+            None,
         )
         assert fig is not None
 
@@ -360,7 +418,9 @@ class TestBatchExport:
         """Verify kaleido can convert a figure to PNG bytes."""
         df, dim_metas = multi_point_data
         fig = build_combined_chart(
-            df=df, dim_metas=dim_metas, dim_nos=["SPC_HG"],
+            df=df,
+            dim_metas=dim_metas,
+            dim_nos=["SPC_HG"],
             section_by_fields=["Factory"],
             y_axis_mode="Measurement values",
             custom_yrange=None,
@@ -371,18 +431,21 @@ class TestBatchExport:
         assert isinstance(png_bytes, bytes)
         assert len(png_bytes) > 1000, f"PNG too small ({len(png_bytes)} bytes)"
         # PNG magic bytes
-        assert png_bytes[:4] == b'\x89PNG'
+        assert png_bytes[:4] == b"\x89PNG"
 
 
 # ---------------------------------------------------------------------------
 # 9. Sidebar Controls — color-by grouping
 # ---------------------------------------------------------------------------
 
+
 class TestColorGrouping:
     def test_color_by_factory(self, multi_point_data):
         df, dim_metas = multi_point_data
         fig = build_combined_chart(
-            df=df, dim_metas=dim_metas, dim_nos=["SPC_HG"],
+            df=df,
+            dim_metas=dim_metas,
+            dim_nos=["SPC_HG"],
             section_by_fields=["Factory"],
             color_by="Factory",
             y_axis_mode="Measurement values",
@@ -405,7 +468,9 @@ class TestColorGrouping:
     def test_color_by_none(self, multi_point_data):
         df, dim_metas = multi_point_data
         fig = build_combined_chart(
-            df=df, dim_metas=dim_metas, dim_nos=["SPC_HG"],
+            df=df,
+            dim_metas=dim_metas,
+            dim_nos=["SPC_HG"],
             section_by_fields=["Factory"],
             color_by="None",
             y_axis_mode="Measurement values",

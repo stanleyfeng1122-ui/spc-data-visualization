@@ -5,11 +5,12 @@ can share the same logic without duplication.
 """
 
 import re
-import pandas as pd
+from collections import OrderedDict
+
 import numpy as np
+import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-from collections import OrderedDict
 from scipy import stats as scipy_stats
 
 from spc_parser import get_filtered_dim_meta
@@ -41,6 +42,7 @@ def get_color_for_group(idx: int) -> str:
 # Data preparation
 # ---------------------------------------------------------------------------
 
+
 def _get_factory(pf):
     """Get factory code for a parsed file dict."""
     return pf.get("factory") or "Unknown"
@@ -58,10 +60,10 @@ def _find_matching_dim(pf_dims, target_dno):
 
     # Strip trailing dash-number suffix for fuzzy matching
     # e.g. "SPC_A-1" base is "SPC_A", "SPC_A" base is "SPC_A"
-    target_base = re.sub(r'-\d+$', '', target_dno)
+    target_base = re.sub(r"-\d+$", "", target_dno)
 
     for candidate_dno, candidate_meta in pf_dims.items():
-        candidate_base = re.sub(r'-\d+$', '', candidate_dno)
+        candidate_base = re.sub(r"-\d+$", "", candidate_dno)
         if candidate_base == target_base:
             return candidate_dno
 
@@ -145,6 +147,7 @@ def prepare_combined_data(parsed_files, dim_nos):
 # Section / row logic
 # ---------------------------------------------------------------------------
 
+
 def compute_sections(df, section_by_fields):
     """
     Assign a section label to each row based on selected fields.
@@ -187,6 +190,7 @@ def compute_row_groups(df, row_by):
 # Chart building -- combined profile view
 # ---------------------------------------------------------------------------
 
+
 def build_combined_chart(
     df,
     dim_metas: OrderedDict,
@@ -220,7 +224,9 @@ def build_combined_chart(
         unique_colors = ["All"]
 
     if custom_color_map:
-        color_map = {g: custom_color_map.get(g, get_color_for_group(i)) for i, g in enumerate(unique_colors)}
+        color_map = {
+            g: custom_color_map.get(g, get_color_for_group(i)) for i, g in enumerate(unique_colors)
+        }
     else:
         color_map = {g: get_color_for_group(i) for i, g in enumerate(unique_colors)}
 
@@ -234,9 +240,11 @@ def build_combined_chart(
         dmeta = dim_metas[dno]
         info = get_filtered_dim_meta(dmeta, exclude_intervals=exclude_intervals)
         col_labels, point_numbers, nominal, usl, lsl = info
-        valid = [(cl, pn, n, u, l) for cl, pn, n, u, l in
-                 zip(col_labels, point_numbers, nominal, usl, lsl)
-                 if cl in df.columns and (_point_filter is None or pn in _point_filter)]
+        valid = [
+            (cl, pn, n, u, l)
+            for cl, pn, n, u, l in zip(col_labels, point_numbers, nominal, usl, lsl)
+            if cl in df.columns and (_point_filter is None or pn in _point_filter)
+        ]
         if valid:
             cls, pns, noms, usls, lsls = zip(*valid)
             dim_point_info[dno] = (list(cls), list(pns), list(noms), list(usls), list(lsls))
@@ -252,7 +260,8 @@ def build_combined_chart(
 
     if use_row_facets:
         fig = make_subplots(
-            rows=n_rows, cols=1,
+            rows=n_rows,
+            cols=1,
             shared_xaxes=True,
             row_titles=[str(r) for r in unique_rows],
             vertical_spacing=0.06,
@@ -309,7 +318,8 @@ def build_combined_chart(
             for dno, (col_labels, point_nums, nominals, usls, lsls) in dim_point_info.items():
                 x_positions = dim_x_positions[(sec_label, dno)]
                 nom_array = np.array(
-                    [n if n is not None else np.nan for n in nominals], dtype=float,
+                    [n if n is not None else np.nan for n in nominals],
+                    dtype=float,
                 )
 
                 for grp_name in unique_colors:
@@ -365,15 +375,21 @@ def build_combined_chart(
                         else:
                             fig.add_trace(trace)
 
-    row_kwargs_list = [dict(row=i+1, col=1) for i in range(n_rows)] if use_row_facets else [{}]
+    row_kwargs_list = [dict(row=i + 1, col=1) for i in range(n_rows)] if use_row_facets else [{}]
 
     dash_style = dict(dash="dash", width=1.2)
     for rk in row_kwargs_list:
         if usl_rep is not None and lsl_rep is not None:
             band_usl = (usl_rep - nom_rep) if (deviation_mode and nom_rep is not None) else usl_rep
             band_lsl = (lsl_rep - nom_rep) if (deviation_mode and nom_rep is not None) else lsl_rep
-            fig.add_hrect(y0=band_lsl, y1=band_usl,
-                          fillcolor="rgba(34, 197, 94, 0.15)", line_width=0, layer="below", **rk)
+            fig.add_hrect(
+                y0=band_lsl,
+                y1=band_usl,
+                fillcolor="rgba(34, 197, 94, 0.15)",
+                line_width=0,
+                layer="below",
+                **rk,
+            )
 
         if usl_rep is not None:
             ref_usl = (usl_rep - nom_rep) if (deviation_mode and nom_rep is not None) else usl_rep
@@ -395,8 +411,14 @@ def build_combined_chart(
         for dno in dim_nos:
             if dno in dim_metas and dim_metas[dno].description:
                 desc = dim_metas[dno].description
-                for keyword in ["z straightness", "flatness", "overall length",
-                                "half length", "half width", "height"]:
+                for keyword in [
+                    "z straightness",
+                    "flatness",
+                    "overall length",
+                    "half length",
+                    "half width",
+                    "height",
+                ]:
                     if keyword in desc.lower():
                         first_desc = keyword.title()
                         break
@@ -428,15 +450,27 @@ def build_combined_chart(
 
     fig.update_layout(
         title=dict(
-            text=f"<b>{title_text}</b>" + (f"<br><span style='font-size:12px;color:#64748B'>{subtitle}</span>" if subtitle else ""),
-            font=dict(size=15), x=0.5, xanchor="center",
+            text=f"<b>{title_text}</b>"
+            + (
+                f"<br><span style='font-size:12px;color:#64748B'>{subtitle}</span>"
+                if subtitle
+                else ""
+            ),
+            font=dict(size=15),
+            x=0.5,
+            xanchor="center",
         ),
         height=chart_height,
         margin=dict(l=50, r=120, t=120, b=80),
         legend=dict(
             title=dict(text=color_by if color_by != "None" else ""),
-            orientation="v", yanchor="top", y=1, xanchor="left", x=1.02,
-            font=dict(size=11), bgcolor="rgba(255,255,255,0.8)",
+            orientation="v",
+            yanchor="top",
+            y=1,
+            xanchor="left",
+            x=1.02,
+            font=dict(size=11),
+            bgcolor="rgba(255,255,255,0.8)",
         ),
         annotations=annotations,
         hovermode="closest",
@@ -459,30 +493,43 @@ def build_combined_chart(
         for i in range(1, n_rows + 1):
             x_axis_name = f"xaxis{i}" if i > 1 else "xaxis"
             y_axis_name = f"yaxis{i}" if i > 1 else "yaxis"
-            show_ticks = (i == n_rows)
-            fig.update_layout(**{
-                x_axis_name: dict(**tick_kwargs, showticklabels=show_ticks),
-                y_axis_name: dict(title=y_title if i == (n_rows + 1) // 2 else "",
-                                  zeroline=True, zerolinecolor="rgba(100,116,139,0.3)",
-                                  **y_range_kwargs),
-            })
+            show_ticks = i == n_rows
+            fig.update_layout(
+                **{
+                    x_axis_name: dict(**tick_kwargs, showticklabels=show_ticks),
+                    y_axis_name: dict(
+                        title=y_title if i == (n_rows + 1) // 2 else "",
+                        zeroline=True,
+                        zerolinecolor="rgba(100,116,139,0.3)",
+                        **y_range_kwargs,
+                    ),
+                }
+            )
     else:
         fig.update_layout(
             xaxis=tick_kwargs,
-            yaxis=dict(title=y_title, zeroline=True, zerolinecolor="rgba(100,116,139,0.3)",
-                       **y_range_kwargs),
+            yaxis=dict(
+                title=y_title,
+                zeroline=True,
+                zerolinecolor="rgba(100,116,139,0.3)",
+                **y_range_kwargs,
+            ),
         )
 
     for val, label in zip(spec_tickvals, spec_ticktext):
-        annotations.append(dict(
-            x=0.0, y=val,
-            xref="paper", yref="y",
-            text=f"<b>{label}</b>",
-            showarrow=False,
-            xanchor="right",
-            font=dict(size=10, color="rgba(220,38,38,0.9)", family="Arial Black"),
-            bgcolor="rgba(255,255,255,0.7)",
-        ))
+        annotations.append(
+            dict(
+                x=0.0,
+                y=val,
+                xref="paper",
+                yref="y",
+                text=f"<b>{label}</b>",
+                showarrow=False,
+                xanchor="right",
+                font=dict(size=10, color="rgba(220,38,38,0.9)", family="Arial Black"),
+                bgcolor="rgba(255,255,255,0.7)",
+            )
+        )
     fig.update_layout(annotations=annotations)
 
     # ----- Factory / section header bands (paper coordinates) -----
@@ -496,30 +543,39 @@ def build_combined_chart(
             px1 = sx1 / total_x_span
             center_x = (px0 + px1) / 2
             section_centers.append((center_x, sec_label))
-            header_shapes.append(dict(
-                type="rect",
-                xref="paper", yref="paper",
-                x0=px0, x1=px1,
-                y0=1.01, y1=1.07,
-                fillcolor="#F1F5F9",
-                line=dict(color="#E2E8F0", width=1),
-                layer="above",
-            ))
+            header_shapes.append(
+                dict(
+                    type="rect",
+                    xref="paper",
+                    yref="paper",
+                    x0=px0,
+                    x1=px1,
+                    y0=1.01,
+                    y1=1.07,
+                    fillcolor="#F1F5F9",
+                    line=dict(color="#E2E8F0", width=1),
+                    layer="above",
+                )
+            )
         # Merge with existing shapes (USL/LSL lines)
         existing_shapes = list(fig.layout.shapes or [])
         fig.update_layout(shapes=existing_shapes + header_shapes)
 
         # Add centered section labels
         for cx, sec_label in section_centers:
-            annotations.append(dict(
-                x=cx, y=1.04,
-                xref="paper", yref="paper",
-                text=f"<b>{sec_label}</b>",
-                showarrow=False,
-                xanchor="center",
-                yanchor="middle",
-                font=dict(size=11, color="#334155"),
-            ))
+            annotations.append(
+                dict(
+                    x=cx,
+                    y=1.04,
+                    xref="paper",
+                    yref="paper",
+                    text=f"<b>{sec_label}</b>",
+                    showarrow=False,
+                    xanchor="center",
+                    yanchor="middle",
+                    font=dict(size=11, color="#334155"),
+                )
+            )
         fig.update_layout(annotations=annotations)
 
     return fig
@@ -528,6 +584,7 @@ def build_combined_chart(
 # ---------------------------------------------------------------------------
 # Chart building -- box plot
 # ---------------------------------------------------------------------------
+
 
 def build_box_plot(
     df,
@@ -561,14 +618,20 @@ def build_box_plot(
         unique_colors = ["All"]
 
     if custom_color_map:
-        color_map = {g: custom_color_map.get(g, get_color_for_group(i)) for i, g in enumerate(unique_colors)}
+        color_map = {
+            g: custom_color_map.get(g, get_color_for_group(i)) for i, g in enumerate(unique_colors)
+        }
     else:
         color_map = {g: get_color_for_group(i) for i, g in enumerate(unique_colors)}
 
     if use_row_facets:
-        fig = make_subplots(rows=n_rows, cols=1, shared_xaxes=True,
-                            row_titles=[str(r) for r in unique_rows],
-                            vertical_spacing=0.06)
+        fig = make_subplots(
+            rows=n_rows,
+            cols=1,
+            shared_xaxes=True,
+            row_titles=[str(r) for r in unique_rows],
+            vertical_spacing=0.06,
+        )
     else:
         fig = go.Figure()
 
@@ -589,9 +652,11 @@ def build_box_plot(
             col_labels, point_nums, nominals, usls, lsls = get_filtered_dim_meta(
                 dmeta, exclude_intervals=exclude_intervals
             )
-            valid = [(cl, pn, n, u, l) for cl, pn, n, u, l in
-                     zip(col_labels, point_nums, nominals, usls, lsls)
-                     if cl in df.columns and (_point_filter is None or pn in _point_filter)]
+            valid = [
+                (cl, pn, n, u, l)
+                for cl, pn, n, u, l in zip(col_labels, point_nums, nominals, usls, lsls)
+                if cl in df.columns and (_point_filter is None or pn in _point_filter)
+            ]
             if not valid:
                 continue
 
@@ -602,7 +667,9 @@ def build_box_plot(
 
                 for grp_name in unique_colors:
                     grp_mask = row_colors == grp_name
-                    values = pd.to_numeric(row_df.loc[grp_mask, col_label], errors="coerce").dropna()
+                    values = pd.to_numeric(
+                        row_df.loc[grp_mask, col_label], errors="coerce"
+                    ).dropna()
                     if deviation_mode and nominal is not None:
                         values = values - nominal
 
@@ -610,10 +677,13 @@ def build_box_plot(
                     legend_shown.add(grp_name)
 
                     trace = go.Box(
-                        y=values, x=[x_label] * len(values),
-                        name=grp_name, legendgroup=grp_name,
+                        y=values,
+                        x=[x_label] * len(values),
+                        name=grp_name,
+                        legendgroup=grp_name,
                         marker_color=color_map[grp_name],
-                        showlegend=show_legend, boxpoints="outliers",
+                        showlegend=show_legend,
+                        boxpoints="outliers",
                     )
                     if use_row_facets:
                         fig.add_trace(trace, row=plotly_row, col=1)
@@ -621,25 +691,46 @@ def build_box_plot(
                         fig.add_trace(trace)
 
     dash_style = dict(dash="dash", width=1.2)
-    row_kwargs_list = [dict(row=i+1, col=1) for i in range(n_rows)] if use_row_facets else [{}]
+    row_kwargs_list = [dict(row=i + 1, col=1) for i in range(n_rows)] if use_row_facets else [{}]
     for rk in row_kwargs_list:
         if rep_usl is not None:
             ref_usl = (rep_usl - rep_nom) if (deviation_mode and rep_nom is not None) else rep_usl
-            fig.add_hline(y=ref_usl, line=dict(color="rgba(220,38,38,0.5)", **dash_style),
-                          annotation_text="USL", annotation_position="top right", **rk)
+            fig.add_hline(
+                y=ref_usl,
+                line=dict(color="rgba(220,38,38,0.5)", **dash_style),
+                annotation_text="USL",
+                annotation_position="top right",
+                **rk,
+            )
         if rep_lsl is not None:
             ref_lsl = (rep_lsl - rep_nom) if (deviation_mode and rep_nom is not None) else rep_lsl
-            fig.add_hline(y=ref_lsl, line=dict(color="rgba(220,38,38,0.5)", **dash_style),
-                          annotation_text="LSL", annotation_position="bottom right", **rk)
+            fig.add_hline(
+                y=ref_lsl,
+                line=dict(color="rgba(220,38,38,0.5)", **dash_style),
+                annotation_text="LSL",
+                annotation_position="bottom right",
+                **rk,
+            )
         if rep_nom is not None:
             ref_nom = 0.0 if deviation_mode else rep_nom
-            fig.add_hline(y=ref_nom, line=dict(color="rgba(34,197,94,0.5)", dash="dot", width=1),
-                          annotation_text="Nominal", annotation_position="top right", **rk)
+            fig.add_hline(
+                y=ref_nom,
+                line=dict(color="rgba(34,197,94,0.5)", dash="dot", width=1),
+                annotation_text="Nominal",
+                annotation_position="top right",
+                **rk,
+            )
         if rep_usl is not None and rep_lsl is not None:
             band_usl = (rep_usl - rep_nom) if (deviation_mode and rep_nom is not None) else rep_usl
             band_lsl = (rep_lsl - rep_nom) if (deviation_mode and rep_nom is not None) else rep_lsl
-            fig.add_hrect(y0=band_lsl, y1=band_usl,
-                          fillcolor="rgba(34, 197, 94, 0.10)", line_width=0, layer="below", **rk)
+            fig.add_hrect(
+                y0=band_lsl,
+                y1=band_usl,
+                fillcolor="rgba(34, 197, 94, 0.10)",
+                line_width=0,
+                layer="below",
+                **rk,
+            )
 
     spec_tickvals = []
     spec_ticktext = []
@@ -655,32 +746,45 @@ def build_box_plot(
     chart_height = 350 * n_rows if use_row_facets else 620
     y_range_kwargs = dict(range=custom_yrange) if custom_yrange else {}
     fig.update_layout(
-        title=dict(text=f"<b>Box Plot: {group_label}</b>", font=dict(size=15),
-                   x=0.5, xanchor="center"),
-        xaxis=dict(title="Measurement Point", tickangle=-45, tickfont=dict(size=8, color="#000000")),
-        yaxis=dict(title="Deviation from Nominal" if deviation_mode else "Value",
-                   **y_range_kwargs),
+        title=dict(
+            text=f"<b>Box Plot: {group_label}</b>", font=dict(size=15), x=0.5, xanchor="center"
+        ),
+        xaxis=dict(
+            title="Measurement Point", tickangle=-45, tickfont=dict(size=8, color="#000000")
+        ),
+        yaxis=dict(title="Deviation from Nominal" if deviation_mode else "Value", **y_range_kwargs),
         boxmode="group",
         height=chart_height,
         margin=dict(l=50, r=120, t=80, b=100),
-        legend=dict(title=dict(text=color_by if color_by != "None" else ""),
-                    orientation="v", yanchor="top", y=1, xanchor="left", x=1.02,
-                    font=dict(size=11), bgcolor="rgba(255,255,255,0.8)"),
+        legend=dict(
+            title=dict(text=color_by if color_by != "None" else ""),
+            orientation="v",
+            yanchor="top",
+            y=1,
+            xanchor="left",
+            x=1.02,
+            font=dict(size=11),
+            bgcolor="rgba(255,255,255,0.8)",
+        ),
         hovermode="closest",
         template="plotly_white",
     )
 
     spec_annotations = []
     for val, label in zip(spec_tickvals, spec_ticktext):
-        spec_annotations.append(dict(
-            x=0.0, y=val,
-            xref="paper", yref="y",
-            text=f"<b>{label}</b>",
-            showarrow=False,
-            xanchor="right",
-            font=dict(size=10, color="rgba(220,38,38,0.9)", family="Arial Black"),
-            bgcolor="rgba(255,255,255,0.7)",
-        ))
+        spec_annotations.append(
+            dict(
+                x=0.0,
+                y=val,
+                xref="paper",
+                yref="y",
+                text=f"<b>{label}</b>",
+                showarrow=False,
+                xanchor="right",
+                font=dict(size=10, color="rgba(220,38,38,0.9)", family="Arial Black"),
+                bgcolor="rgba(255,255,255,0.7)",
+            )
+        )
     if spec_annotations:
         existing = list(fig.layout.annotations or [])
         fig.update_layout(annotations=existing + spec_annotations)
@@ -691,6 +795,7 @@ def build_box_plot(
 # ---------------------------------------------------------------------------
 # Chart building -- histogram
 # ---------------------------------------------------------------------------
+
 
 def build_histogram(
     df,
@@ -725,7 +830,9 @@ def build_histogram(
         unique_colors = ["All"]
 
     if custom_color_map:
-        color_map = {g: custom_color_map.get(g, get_color_for_group(i)) for i, g in enumerate(unique_colors)}
+        color_map = {
+            g: custom_color_map.get(g, get_color_for_group(i)) for i, g in enumerate(unique_colors)
+        }
     else:
         color_map = {g: get_color_for_group(i) for i, g in enumerate(unique_colors)}
 
@@ -744,7 +851,8 @@ def build_histogram(
                 else:
                     subplot_titles.append(str(dno))
         fig = make_subplots(
-            rows=n_rows, cols=n_cols,
+            rows=n_rows,
+            cols=n_cols,
             subplot_titles=subplot_titles,
             shared_yaxes=True,
             vertical_spacing=0.08,
@@ -763,8 +871,11 @@ def build_histogram(
             col_labels, point_nums, nominals, usls, lsls = get_filtered_dim_meta(
                 dmeta, exclude_intervals=exclude_intervals
             )
-            valid_cols = [c for c, pn in zip(col_labels, point_nums)
-                          if c in df.columns and (_point_filter is None or pn in _point_filter)]
+            valid_cols = [
+                c
+                for c, pn in zip(col_labels, point_nums)
+                if c in df.columns and (_point_filter is None or pn in _point_filter)
+            ]
             if not valid_cols:
                 continue
 
@@ -774,9 +885,11 @@ def build_histogram(
 
             for grp_name in unique_colors:
                 grp_mask = (color_series == grp_name) & row_mask
-                values = df.loc[grp_mask, valid_cols].apply(
-                    pd.to_numeric, errors="coerce"
-                ).values.flatten()
+                values = (
+                    df.loc[grp_mask, valid_cols]
+                    .apply(pd.to_numeric, errors="coerce")
+                    .values.flatten()
+                )
                 values = values[~np.isnan(values)]
 
                 if len(values) == 0:
@@ -786,9 +899,13 @@ def build_histogram(
                 legend_shown.add(grp_name)
 
                 trace = go.Histogram(
-                    x=values, name=grp_name, legendgroup=grp_name,
-                    marker_color=color_map[grp_name], opacity=0.6,
-                    nbinsx=nbins, showlegend=show_legend,
+                    x=values,
+                    name=grp_name,
+                    legendgroup=grp_name,
+                    marker_color=color_map[grp_name],
+                    opacity=0.6,
+                    nbinsx=nbins,
+                    showlegend=show_legend,
                 )
 
                 if use_subplots:
@@ -799,25 +916,48 @@ def build_histogram(
             line_kwargs = dict(row=plotly_row, col=col_idx) if use_subplots else {}
             dash_style = dict(dash="dash", width=1.5)
             if usl_val is not None:
-                fig.add_vline(x=usl_val, line=dict(color="rgba(220,38,38,0.7)", **dash_style),
-                              annotation_text="USL", annotation_position="top right", **line_kwargs)
+                fig.add_vline(
+                    x=usl_val,
+                    line=dict(color="rgba(220,38,38,0.7)", **dash_style),
+                    annotation_text="USL",
+                    annotation_position="top right",
+                    **line_kwargs,
+                )
             if lsl_val is not None:
-                fig.add_vline(x=lsl_val, line=dict(color="rgba(220,38,38,0.7)", **dash_style),
-                              annotation_text="LSL", annotation_position="top left", **line_kwargs)
+                fig.add_vline(
+                    x=lsl_val,
+                    line=dict(color="rgba(220,38,38,0.7)", **dash_style),
+                    annotation_text="LSL",
+                    annotation_position="top left",
+                    **line_kwargs,
+                )
             if nom_val is not None:
-                fig.add_vline(x=nom_val, line=dict(color="rgba(34,197,94,0.7)", dash="dot", width=1.2),
-                              annotation_text="Nom", annotation_position="top", **line_kwargs)
+                fig.add_vline(
+                    x=nom_val,
+                    line=dict(color="rgba(34,197,94,0.7)", dash="dot", width=1.2),
+                    annotation_text="Nom",
+                    annotation_position="top",
+                    **line_kwargs,
+                )
 
     chart_height = max(400, 300 * n_rows)
     fig.update_layout(
-        title=dict(text=f"<b>Histogram: {group_label}</b>", font=dict(size=15),
-                   x=0.5, xanchor="center"),
+        title=dict(
+            text=f"<b>Histogram: {group_label}</b>", font=dict(size=15), x=0.5, xanchor="center"
+        ),
         barmode="overlay",
         height=chart_height,
         margin=dict(l=50, r=120, t=80, b=60),
-        legend=dict(title=dict(text=color_by if color_by != "None" else ""),
-                    orientation="v", yanchor="top", y=1, xanchor="left", x=1.02,
-                    font=dict(size=11), bgcolor="rgba(255,255,255,0.8)"),
+        legend=dict(
+            title=dict(text=color_by if color_by != "None" else ""),
+            orientation="v",
+            yanchor="top",
+            y=1,
+            xanchor="left",
+            x=1.02,
+            font=dict(size=11),
+            bgcolor="rgba(255,255,255,0.8)",
+        ),
         template="plotly_white",
     )
 
@@ -832,6 +972,7 @@ def build_histogram(
 # Plotly white-background finalizer
 # ---------------------------------------------------------------------------
 
+
 def finalize_plotly_style(fig):
     """Apply consistent white background and black text to a Plotly figure."""
     fig.update_layout(
@@ -840,8 +981,12 @@ def finalize_plotly_style(fig):
         font=dict(color="#000000", family="SF Pro Display, SF Pro, -apple-system, sans-serif"),
         title=dict(font=dict(color="#000000")),
         legend=dict(font=dict(color="#000000"), title=dict(font=dict(color="#000000"))),
-        xaxis=dict(tickfont=dict(color="#000000"), title=dict(font=dict(color="#000000")), color="#000000"),
-        yaxis=dict(tickfont=dict(color="#000000"), title=dict(font=dict(color="#000000")), color="#000000"),
+        xaxis=dict(
+            tickfont=dict(color="#000000"), title=dict(font=dict(color="#000000")), color="#000000"
+        ),
+        yaxis=dict(
+            tickfont=dict(color="#000000"), title=dict(font=dict(color="#000000")), color="#000000"
+        ),
     )
     return fig
 
@@ -849,6 +994,7 @@ def finalize_plotly_style(fig):
 # ---------------------------------------------------------------------------
 # SPC analytics (pure computation, no Streamlit dependency)
 # ---------------------------------------------------------------------------
+
 
 def calc_process_capability(data_series, usl_val, lsl_val):
     """Calculate Cp, Cpk, Pp, Ppk, sigma level, DPMO, and yield %."""
@@ -870,8 +1016,9 @@ def calc_process_capability(data_series, usl_val, lsl_val):
         ppu = (usl_val - mean) / (3 * std_overall) if std_overall > 0 else np.nan
         ppl = (mean - lsl_val) / (3 * std_overall) if std_overall > 0 else np.nan
         ppk = min(ppu, ppl) if std_overall > 0 else np.nan
-        result.update({"Cp": round(cp, 4), "Cpk": round(cpk, 4),
-                        "Pp": round(pp, 4), "Ppk": round(ppk, 4)})
+        result.update(
+            {"Cp": round(cp, 4), "Cpk": round(cpk, 4), "Pp": round(pp, 4), "Ppk": round(ppk, 4)}
+        )
         sigma_level = cpk * 3
         result["Sigma Level"] = round(sigma_level, 2)
         z_upper = (usl_val - mean) / std_within if std_within > 0 else np.inf
@@ -919,46 +1066,46 @@ def nelson_rules(data_series):
 
     r2 = []
     for i in range(n - 8):
-        segment = data[i:i+9]
+        segment = data[i : i + 9]
         if all(s > mean for s in segment) or all(s < mean for s in segment):
-            r2.extend(range(i, i+9))
+            r2.extend(range(i, i + 9))
     if r2:
         violations["Rule 2: 9 pts same side"] = sorted(set(r2))
 
     r3 = []
     for i in range(n - 5):
-        seg = data[i:i+6]
+        seg = data[i : i + 6]
         diffs = np.diff(seg)
         if all(d > 0 for d in diffs) or all(d < 0 for d in diffs):
-            r3.extend(range(i, i+6))
+            r3.extend(range(i, i + 6))
     if r3:
         violations["Rule 3: 6 pts trend"] = sorted(set(r3))
 
     r4 = []
     for i in range(n - 13):
-        seg = data[i:i+14]
+        seg = data[i : i + 14]
         diffs = np.diff(seg)
-        alternating = all(diffs[j] * diffs[j+1] < 0 for j in range(len(diffs)-1))
+        alternating = all(diffs[j] * diffs[j + 1] < 0 for j in range(len(diffs) - 1))
         if alternating:
-            r4.extend(range(i, i+14))
+            r4.extend(range(i, i + 14))
     if r4:
         violations["Rule 4: 14 pts alternating"] = sorted(set(r4))
 
     r5 = []
     for i in range(n - 2):
-        seg = data[i:i+3]
-        above = sum(1 for s in seg if s > mean + 2*std)
-        below = sum(1 for s in seg if s < mean - 2*std)
+        seg = data[i : i + 3]
+        above = sum(1 for s in seg if s > mean + 2 * std)
+        below = sum(1 for s in seg if s < mean - 2 * std)
         if above >= 2 or below >= 2:
-            r5.extend(range(i, i+3))
+            r5.extend(range(i, i + 3))
     if r5:
         violations["Rule 5: 2/3 beyond 2s"] = sorted(set(r5))
 
     r6 = []
     for i in range(n - 14):
-        seg = data[i:i+15]
+        seg = data[i : i + 15]
         if all(abs(s - mean) < std for s in seg):
-            r6.extend(range(i, i+15))
+            r6.extend(range(i, i + 15))
     if r6:
         violations["Rule 6: 15 pts within 1s"] = sorted(set(r6))
 
@@ -982,8 +1129,8 @@ def cusum_analysis(data_series, target=None, h=5.0, k=0.5):
 
     for i in range(n):
         zi = (data[i] - mean) / std
-        cusum_pos[i] = max(0, cusum_pos[i-1] + zi - k) if i > 0 else max(0, zi - k)
-        cusum_neg[i] = max(0, cusum_neg[i-1] - zi - k) if i > 0 else max(0, -zi - k)
+        cusum_pos[i] = max(0, cusum_pos[i - 1] + zi - k) if i > 0 else max(0, zi - k)
+        cusum_neg[i] = max(0, cusum_neg[i - 1] - zi - k) if i > 0 else max(0, -zi - k)
         if cusum_pos[i] > h or cusum_neg[i] > h:
             shift_points.append(i)
 

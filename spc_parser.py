@@ -6,13 +6,13 @@ Handles varying column layouts between different vendor files.
 Supports both "Data Input" (summary values) and "Raw data" (full profiles) sheets.
 """
 
+import io
+import re
+from collections import OrderedDict
+from dataclasses import dataclass, field
+
 import openpyxl
 import pandas as pd
-import re
-from dataclasses import dataclass, field
-from collections import OrderedDict
-from typing import Optional, Dict, List, Tuple
-import io
 
 # ---------------------------------------------------------------------------
 # Monkey-patch openpyxl 3.1.x ExternalReference bug
@@ -21,8 +21,10 @@ import io
 # a positional 'id' arg. The fix: make 'id' optional with a default.
 # ---------------------------------------------------------------------------
 try:
-    from openpyxl.packaging.workbook import ExternalReference as _ER
     import inspect as _inspect
+
+    from openpyxl.packaging.workbook import ExternalReference as _ER
+
     _params = _inspect.signature(_ER.__init__).parameters
     if "id" in _params and _params["id"].default is _inspect.Parameter.empty:
         _ER.__init__.__defaults__ = ("",)
@@ -30,38 +32,40 @@ except Exception:
     pass
 
 
-
 # ---------------------------------------------------------------------------
 # Data classes
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class DimensionMeta:
     """Metadata for a single dimension group (e.g. SPC_AA)."""
-    dim_no: str                     # e.g. "SPC_AA"
-    description: str                # e.g. "landing to E surface height"
-    dim_type: str                   # e.g. "Non-Profile Measurement"
-    point_numbers: list             # list of point labels per sub-column
-    nominal: list                   # nominal value per sub-column
-    tol_max: list                   # tolerance max (+) per sub-column
-    tol_min: list                   # tolerance min (-) per sub-column
-    usl: list                       # upper spec limit per sub-column
-    lsl: list                       # lower spec limit per sub-column
-    col_indices: list               # 1-based column indices in the sheet
-    col_labels: list                # readable column labels for the dataframe
+
+    dim_no: str  # e.g. "SPC_AA"
+    description: str  # e.g. "landing to E surface height"
+    dim_type: str  # e.g. "Non-Profile Measurement"
+    point_numbers: list  # list of point labels per sub-column
+    nominal: list  # nominal value per sub-column
+    tol_max: list  # tolerance max (+) per sub-column
+    tol_min: list  # tolerance min (-) per sub-column
+    usl: list  # upper spec limit per sub-column
+    lsl: list  # lower spec limit per sub-column
+    col_indices: list  # 1-based column indices in the sheet
+    col_labels: list  # readable column labels for the dataframe
 
 
 @dataclass
 class ParsedFile:
     """Result of parsing a single Excel file."""
+
     filename: str
     sheet_name: str
-    part_number: Optional[str] = None
-    part_description: Optional[str] = None
-    revision: Optional[str] = None
-    factory: Optional[str] = None   # factory/site code (e.g. "FX", "TY")
+    part_number: str | None = None
+    part_description: str | None = None
+    revision: str | None = None
+    factory: str | None = None  # factory/site code (e.g. "FX", "TY")
     dimensions: OrderedDict = field(default_factory=OrderedDict)  # dim_no -> DimensionMeta
-    data: Optional[pd.DataFrame] = None  # measurement rows
+    data: pd.DataFrame | None = None  # measurement rows
     meta_columns: list = field(default_factory=list)  # names of metadata columns present
 
 
@@ -70,9 +74,16 @@ class ParsedFile:
 # ---------------------------------------------------------------------------
 
 KNOWN_META_HEADERS = {
-    "build", "shipment date", "color", "config",
-    "vendor serial number", "fabric thickness",
-    "2d barcode", "1d barcode", "rm coil", "raw material",
+    "build",
+    "shipment date",
+    "color",
+    "config",
+    "vendor serial number",
+    "fabric thickness",
+    "2d barcode",
+    "1d barcode",
+    "rm coil",
+    "raw material",
     "start point",
 }
 
@@ -80,6 +91,7 @@ KNOWN_META_HEADERS = {
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _safe_str(val) -> str:
     """Convert a cell value to a stripped string, or empty string if None."""
@@ -100,12 +112,13 @@ def _safe_num(val):
 
 def _is_interval_point(point_label: str) -> bool:
     """Check if a point label is an interval (e.g. 'C11-C12') vs actual (e.g. 'C11')."""
-    return bool(re.search(r'C\d+-C\d+', str(point_label)))
+    return bool(re.search(r"C\d+-C\d+", str(point_label)))
 
 
 # ---------------------------------------------------------------------------
 # Core parser
 # ---------------------------------------------------------------------------
+
 
 def _find_dim_no_cell(rows, max_scan_rows=50, max_scan_cols=30):
     """
@@ -137,17 +150,26 @@ def _scan_label_rows(rows, label_col, start_row, end_row):
         s = str(val).strip().lower()
         # Normalise common variants
         label_map = {
-            "dim. no.": "dim_no", "dim no.": "dim_no", "dim. no": "dim_no",
+            "dim. no.": "dim_no",
+            "dim no.": "dim_no",
+            "dim. no": "dim_no",
             "dimension description": "description",
             "dimension type": "dim_type",
             "point number (if applicable)": "point_number",
-            "point number": "point_number", "point no.": "point_number",
-            "nominal dim.": "nominal", "nominal": "nominal",
-            "tol. max. (+)": "tol_max", "tol. max (+)": "tol_max",
-            "tol max (+)": "tol_max", "tol max": "tol_max",
-            "tol. min. (-)": "tol_min", "tol. min (-)": "tol_min",
-            "tol min (-)": "tol_min", "tol min": "tol_min",
-            "usl": "usl", "lsl": "lsl",
+            "point number": "point_number",
+            "point no.": "point_number",
+            "nominal dim.": "nominal",
+            "nominal": "nominal",
+            "tol. max. (+)": "tol_max",
+            "tol. max (+)": "tol_max",
+            "tol max (+)": "tol_max",
+            "tol max": "tol_max",
+            "tol. min. (-)": "tol_min",
+            "tol. min (-)": "tol_min",
+            "tol min (-)": "tol_min",
+            "tol min": "tol_min",
+            "usl": "usl",
+            "lsl": "lsl",
             "start point": "start_point",
             "sn": "sn",
             "process": "process",
@@ -227,9 +249,9 @@ def _is_non_data_sheet(name: str) -> bool:
     return False
 
 
-def _parse_single_sheet(wb, sheet_name: str, sheet_rows: list,
-                        dim_no_row: int, dim_no_col: int,
-                        filename: str) -> ParsedFile:
+def _parse_single_sheet(
+    wb, sheet_name: str, sheet_rows: list, dim_no_row: int, dim_no_col: int, filename: str
+) -> ParsedFile:
     """
     Parse a single sheet that has already been identified as containing
     CPK data (i.e. has a "Dim. No." cell at the given position).
@@ -237,7 +259,7 @@ def _parse_single_sheet(wb, sheet_name: str, sheet_rows: list,
     This is the core parsing logic extracted from parse_excel so it can
     be reused for multi-sheet files.
     """
-    label_col = dim_no_col       # column containing row labels
+    label_col = dim_no_col  # column containing row labels
     data_col_start = label_col + 1  # first column of dimension data
 
     result = ParsedFile(filename=filename, sheet_name=sheet_name)
@@ -331,8 +353,8 @@ def _parse_single_sheet(wb, sheet_name: str, sheet_rows: list,
     #     point numbers (i.e. the compact format pattern).
     # ------------------------------------------------------------------
     merged_groups = OrderedDict()  # parent_name -> list of col indices
-    merged_descs = {}              # parent_name -> description
-    consumed = set()               # dim_nos already merged
+    merged_descs = {}  # parent_name -> description
+    consumed = set()  # dim_nos already merged
 
     # First pass: find explicit parents with .NNN children
     for dno in list(dim_groups.keys()):
@@ -342,7 +364,7 @@ def _parse_single_sheet(wb, sheet_name: str, sheet_rows: list,
         for other in dim_groups:
             if other == dno:
                 continue
-            if re.match(re.escape(dno) + r'\.\d+$', other):
+            if re.match(re.escape(dno) + r"\.\d+$", other):
                 children.append(other)
         if children:
             all_cols = list(dim_groups[dno])
@@ -359,7 +381,7 @@ def _parse_single_sheet(wb, sheet_name: str, sheet_rows: list,
     for dno in list(dim_groups.keys()):
         if dno in consumed:
             continue
-        m = re.match(r'^(.+)\.\d+$', dno)
+        m = re.match(r"^(.+)\.\d+$", dno)
         if m:
             prefix = m.group(1)
             orphans.setdefault(prefix, []).append(dno)
@@ -527,9 +549,7 @@ def _parse_single_sheet(wb, sheet_name: str, sheet_rows: list,
 
     # Convert Shipment Date to datetime if present
     if "Shipment Date" in result.data.columns:
-        result.data["Shipment Date"] = pd.to_datetime(
-            result.data["Shipment Date"], errors="coerce"
-        )
+        result.data["Shipment Date"] = pd.to_datetime(result.data["Shipment Date"], errors="coerce")
 
     # ------------------------------------------------------------------
     # 7. Detect factory / site code
@@ -546,14 +566,14 @@ def _parse_single_sheet(wb, sheet_name: str, sheet_rows: list,
         sn_vals = result.data["SN"].dropna().astype(str)
         if len(sn_vals) > 0:
             first_sn = sn_vals.iloc[0]
-            m = re.match(r'^([A-Z]{2,4})', first_sn)
+            m = re.match(r"^([A-Z]{2,4})", first_sn)
             if m:
                 result.factory = m.group(1)
 
     # Fallback: try to extract factory from filename (e.g. "FX_K116_...")
     if not result.factory:
         name_parts = filename.split("_")
-        if name_parts and re.match(r'^[A-Z]{2,4}$', name_parts[0]):
+        if name_parts and re.match(r"^[A-Z]{2,4}$", name_parts[0]):
             result.factory = name_parts[0]
 
     return result
@@ -591,27 +611,18 @@ def _open_strict_ooxml(file_or_path):
     in-memory to the transitional ones that openpyxl understands.
     """
     import zipfile
+
     _STRICT_TO_TRANSITIONAL = {
-        "http://purl.oclc.org/ooxml/spreadsheetml/main":
-            "http://schemas.openxmlformats.org/spreadsheetml/2006/main",
-        "http://purl.oclc.org/ooxml/officeDocument/relationships":
-            "http://schemas.openxmlformats.org/officeDocument/2006/relationships",
-        "http://purl.oclc.org/ooxml/drawingml/main":
-            "http://schemas.openxmlformats.org/drawingml/2006/main",
-        "http://purl.oclc.org/ooxml/drawingml/chart":
-            "http://schemas.openxmlformats.org/drawingml/2006/chart",
-        "http://purl.oclc.org/ooxml/drawingml/spreadsheetDrawing":
-            "http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing",
-        "http://purl.oclc.org/ooxml/officeDocument/relationships/worksheet":
-            "http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet",
-        "http://purl.oclc.org/ooxml/officeDocument/relationships/sharedStrings":
-            "http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings",
-        "http://purl.oclc.org/ooxml/officeDocument/relationships/styles":
-            "http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles",
-        "http://purl.oclc.org/ooxml/officeDocument/relationships/theme":
-            "http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme",
-        "http://purl.oclc.org/ooxml/officeDocument/relationships/externalLink":
-            "http://schemas.openxmlformats.org/officeDocument/2006/relationships/externalLink",
+        "http://purl.oclc.org/ooxml/spreadsheetml/main": "http://schemas.openxmlformats.org/spreadsheetml/2006/main",
+        "http://purl.oclc.org/ooxml/officeDocument/relationships": "http://schemas.openxmlformats.org/officeDocument/2006/relationships",
+        "http://purl.oclc.org/ooxml/drawingml/main": "http://schemas.openxmlformats.org/drawingml/2006/main",
+        "http://purl.oclc.org/ooxml/drawingml/chart": "http://schemas.openxmlformats.org/drawingml/2006/chart",
+        "http://purl.oclc.org/ooxml/drawingml/spreadsheetDrawing": "http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing",
+        "http://purl.oclc.org/ooxml/officeDocument/relationships/worksheet": "http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet",
+        "http://purl.oclc.org/ooxml/officeDocument/relationships/sharedStrings": "http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings",
+        "http://purl.oclc.org/ooxml/officeDocument/relationships/styles": "http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles",
+        "http://purl.oclc.org/ooxml/officeDocument/relationships/theme": "http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme",
+        "http://purl.oclc.org/ooxml/officeDocument/relationships/externalLink": "http://schemas.openxmlformats.org/officeDocument/2006/relationships/externalLink",
     }
 
     buf_in = io.BytesIO()
@@ -638,6 +649,7 @@ def _open_strict_ooxml(file_or_path):
 
     buf_out.seek(0)
     import warnings
+
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         return openpyxl.load_workbook(buf_out, data_only=True, read_only=True, keep_links=False)
@@ -700,12 +712,10 @@ def parse_excel(file_or_path, sheet_name: str = "Raw data") -> ParsedFile:
 
     available = ", ".join(wb.sheetnames)
     wb.close()
-    raise ValueError(
-        f"No CPK data found in any sheet. Available sheets: {available}"
-    )
+    raise ValueError(f"No CPK data found in any sheet. Available sheets: {available}")
 
 
-def parse_excel_multi(file_or_path, sheet_name: str = "Raw data") -> List[ParsedFile]:
+def parse_excel_multi(file_or_path, sheet_name: str = "Raw data") -> list[ParsedFile]:
     """
     Parse a vendor CPK Excel file and return a list of ParsedFile objects.
 
@@ -788,7 +798,8 @@ def parse_excel_multi(file_or_path, sheet_name: str = "Raw data") -> List[Parsed
 # Dimension grouping by description keywords
 # ---------------------------------------------------------------------------
 
-def detect_dimension_groups(dimensions: OrderedDict) -> Dict[str, List[str]]:
+
+def detect_dimension_groups(dimensions: OrderedDict) -> dict[str, list[str]]:
     """
     Auto-detect dimension groups by analysing description keywords.
 
@@ -798,8 +809,8 @@ def detect_dimension_groups(dimensions: OrderedDict) -> Dict[str, List[str]]:
     Also includes an "All dimensions" pseudo-group.
     """
     # Build keyword -> list of dim_nos mapping
-    keyword_map: Dict[str, List[Tuple[str, str]]] = {}  # keyword -> [(dim_no, description)]
-    ungrouped: List[Tuple[str, str]] = []  # dims with no keyword match
+    keyword_map: dict[str, list[tuple[str, str]]] = {}  # keyword -> [(dim_no, description)]
+    ungrouped: list[tuple[str, str]] = []  # dims with no keyword match
 
     for dno, dmeta in dimensions.items():
         desc = dmeta.description.lower().strip()
@@ -813,7 +824,7 @@ def detect_dimension_groups(dimensions: OrderedDict) -> Dict[str, List[str]]:
         else:
             ungrouped.append((dno, dmeta.description))
 
-    groups: Dict[str, List[str]] = OrderedDict()
+    groups: dict[str, list[str]] = OrderedDict()
 
     # Keyword-matched groups (2+ dimensions sharing a keyword)
     for keyword, dim_list in keyword_map.items():
@@ -881,7 +892,7 @@ def _extract_group_keyword(description: str) -> str:
 def get_filtered_dim_meta(
     dmeta: DimensionMeta,
     exclude_intervals: bool = True,
-) -> Tuple[List[str], List[str], List, List, List]:
+) -> tuple[list[str], list[str], list, list, list]:
     """
     Return filtered lists of (col_labels, point_numbers, nominal, usl, lsl)
     optionally excluding interval points (e.g. "C11-C12").
@@ -917,6 +928,7 @@ def get_filtered_dim_meta(
 # ---------------------------------------------------------------------------
 # Convenience helpers for the app layer
 # ---------------------------------------------------------------------------
+
 
 def get_dimension_options(parsed: ParsedFile) -> list:
     """

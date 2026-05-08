@@ -30,7 +30,7 @@ from shared_ui import (
     render_summary_statistics,
 )
 from spc_parser import _open_workbook, parse_excel_multi
-from ui_theme import inject_theme
+from spc_viz.theme import inject_theme
 
 # ---------------------------------------------------------------------------
 # Page config

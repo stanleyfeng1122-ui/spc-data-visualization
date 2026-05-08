@@ -28,7 +28,7 @@ from shared_ui import (
     render_summary_statistics,
 )
 from spc_parser import parse_excel_multi
-from ui_theme import FONT_MONO, TEXT_MUTED, inject_theme
+from spc_viz.theme import FONT_MONO, TEXT_MUTED, inject_theme
 
 # ---------------------------------------------------------------------------
 # Page config

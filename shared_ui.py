@@ -27,7 +27,7 @@ from chart_utils import (
     prepare_combined_data,
 )
 from spc_parser import detect_dimension_groups, get_filtered_dim_meta
-from ui_theme import (
+from spc_viz.theme import (
     ACCENT,
     BORDER,
     DANGER,

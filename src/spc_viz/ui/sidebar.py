@@ -1,8 +1,13 @@
 """Sidebar layout helpers: chart-type/grouping/Y-axis controls and color pickers."""
 
+from __future__ import annotations
+
 import streamlit as st
+from pandas import DataFrame
 
 from spc_viz.charts import get_color_for_group
+
+from .state import ChartControls
 
 # ---------------------------------------------------------------------------
 # Chart type + grouping + Y-axis controls
@@ -21,14 +26,15 @@ SECTION_FIELDS = [
 ]
 
 
-def build_chart_controls(parsed_files, key_prefix=""):
+def build_chart_controls(parsed_files: list[dict], key_prefix: str = "") -> ChartControls:
     """Render chart-type, grouping, and Y-axis controls.
 
-    Returns dict with keys: chart_type, color_by, section_by_fields, row_by,
-    y_axis_mode, hist_nbins, custom_yrange.
+    Returns a :class:`ChartControls` dataclass with keys: chart_type,
+    color_by, section_by_fields, row_by, y_axis_mode, hist_nbins,
+    custom_yrange.
     """
     st.sidebar.markdown("---")
-    chart_label = st.sidebar.radio(
+    chart_label: str = st.sidebar.radio(
         "Chart type",
         options=_CHART_LABELS,
         index=0,
@@ -38,7 +44,7 @@ def build_chart_controls(parsed_files, key_prefix=""):
     chart_type = _CHART_MAP[chart_label]
 
     # Determine available metadata columns
-    available_meta = set()
+    available_meta: set[str] = set()
     for pf in parsed_files:
         available_meta.update(pf["meta_columns"])
     available_meta.discard("Start Point")
@@ -48,13 +54,14 @@ def build_chart_controls(parsed_files, key_prefix=""):
 
     meta_list = sorted(available_meta)
     groupby_options = [m for m in meta_list if m not in ("Start Point", "SN")] + ["None"]
-    color_by = st.sidebar.selectbox(
+    color_by: str = st.sidebar.selectbox(
         "Color-by",
         options=groupby_options,
         index=len(groupby_options) - 1,
         key=f"{key_prefix}color",
     )
 
+    section_by_fields: list[str]
     if chart_type in ("Combined Profile", "Box Plot"):
         section_options = [m for m in meta_list if m not in ("Start Point", "SN")]
         section_options += [s for s in ("Factory", "Source File") if s not in section_options]
@@ -68,13 +75,14 @@ def build_chart_controls(parsed_files, key_prefix=""):
         section_by_fields = []
 
     rowby_options = [m for m in meta_list if m not in ("Start Point", "SN")] + ["None"]
-    row_by = st.sidebar.selectbox(
+    row_by: str = st.sidebar.selectbox(
         "Row-by",
         options=rowby_options,
         index=len(rowby_options) - 1,
         key=f"{key_prefix}row",
     )
 
+    y_axis_mode: str
     if chart_type in ("Combined Profile", "Box Plot"):
         y_axis_mode = st.sidebar.selectbox(
             "Y-axis",
@@ -85,6 +93,7 @@ def build_chart_controls(parsed_files, key_prefix=""):
     else:
         y_axis_mode = "Measurement values"
 
+    hist_nbins: int
     if chart_type == "Histogram":
         hist_nbins = st.sidebar.slider("Bins", 10, 100, 40, key=f"{key_prefix}bins")
     else:
@@ -92,23 +101,28 @@ def build_chart_controls(parsed_files, key_prefix=""):
 
     st.sidebar.markdown("---")
     st.sidebar.subheader("Y-axis Range")
-    use_custom = st.sidebar.checkbox("Custom Y range", value=False, key=f"{key_prefix}yr")
+    use_custom: bool = st.sidebar.checkbox("Custom Y range", value=False, key=f"{key_prefix}yr")
+    custom_yrange: list[float] | None
     if use_custom:
-        y_min = st.sidebar.number_input("Min", value=0.0, format="%.4f", key=f"{key_prefix}ymin")
-        y_max = st.sidebar.number_input("Max", value=1.0, format="%.4f", key=f"{key_prefix}ymax")
+        y_min: float = st.sidebar.number_input(
+            "Min", value=0.0, format="%.4f", key=f"{key_prefix}ymin"
+        )
+        y_max: float = st.sidebar.number_input(
+            "Max", value=1.0, format="%.4f", key=f"{key_prefix}ymax"
+        )
         custom_yrange = [y_min, y_max] if y_min < y_max else None
     else:
         custom_yrange = None
 
-    return {
-        "chart_type": chart_type,
-        "color_by": color_by,
-        "section_by_fields": section_by_fields,
-        "row_by": row_by,
-        "y_axis_mode": y_axis_mode,
-        "hist_nbins": hist_nbins,
-        "custom_yrange": custom_yrange,
-    }
+    return ChartControls(
+        chart_type=chart_type,  # type: ignore[arg-type]
+        color_by=color_by,
+        section_by_fields=section_by_fields,
+        row_by=row_by,
+        y_axis_mode=y_axis_mode,  # type: ignore[arg-type]
+        hist_nbins=hist_nbins,
+        custom_yrange=custom_yrange,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -116,7 +130,11 @@ def build_chart_controls(parsed_files, key_prefix=""):
 # ---------------------------------------------------------------------------
 
 
-def build_color_pickers(df_clean, color_by, key_prefix=""):
+def build_color_pickers(
+    df_clean: DataFrame,
+    color_by: str,
+    key_prefix: str = "",
+) -> dict[str, str]:
     """Render per-group color pickers. Returns custom_color_map dict."""
     st.sidebar.markdown("---")
     st.sidebar.subheader("Colors")
@@ -125,7 +143,7 @@ def build_color_pickers(df_clean, color_by, key_prefix=""):
     else:
         groups = ["All"]
 
-    custom_color_map = {}
+    custom_color_map: dict[str, str] = {}
     for i, grp in enumerate(groups):
         default_color = get_color_for_group(i)
         custom_color_map[grp] = st.sidebar.color_picker(

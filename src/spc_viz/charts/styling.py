@@ -5,13 +5,16 @@ background, font, and axis colour treatment used across every chart in
 the app. Pure code movement from the original ``chart_utils`` module.
 """
 
+from __future__ import annotations
+
+from plotly.graph_objects import Figure
 
 # ---------------------------------------------------------------------------
 # Plotly white-background finalizer
 # ---------------------------------------------------------------------------
 
 
-def finalize_plotly_style(fig):
+def finalize_plotly_style(fig: Figure) -> Figure:
     """Apply consistent white background and black text to a Plotly figure."""
     fig.update_layout(
         paper_bgcolor="#FFFFFF",

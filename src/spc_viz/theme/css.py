@@ -603,6 +603,6 @@ footer, footer * {{ background: {WHITE} !important; color: {TEXT_MUTED} !importa
 """
 
 
-def inject_theme():
+def inject_theme() -> None:
     """Inject the shared CSS theme into the current Streamlit page."""
     st.markdown(CSS, unsafe_allow_html=True)

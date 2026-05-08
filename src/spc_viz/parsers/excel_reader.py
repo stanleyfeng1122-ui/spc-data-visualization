@@ -9,6 +9,9 @@ more data sheets per workbook).
 
 from __future__ import annotations
 
+import io
+from typing import IO, Union
+
 import openpyxl
 import pandas as pd
 
@@ -23,20 +26,23 @@ from .measurements import (
 from .metadata import build_meta_col_map, coerce_shipment_date, detect_factory
 from .openpyxl_patch import _open_strict_ooxml
 
+# Type alias for accepted file inputs (path string or file-like object)
+FileOrPath = Union[str, IO[bytes]]
+
 
 # ---------------------------------------------------------------------------
 # Workbook open
 # ---------------------------------------------------------------------------
 
 
-def _open_workbook(file_or_path):
+def _open_workbook(file_or_path: FileOrPath) -> tuple[openpyxl.Workbook, str]:
     """Open workbook and return (wb, filename).
 
     Uses keep_links=False to skip external references.
     If openpyxl returns 0 sheets (strict-OOXML bug), converts the file
     to transitional OOXML in-memory using zipfile XML namespace rewrite.
     """
-    if isinstance(file_or_path, (str,)):
+    if isinstance(file_or_path, str):
         filename = file_or_path.rsplit("/", 1)[-1].rsplit("\\", 1)[-1]
         wb = openpyxl.load_workbook(file_or_path, data_only=True, read_only=True, keep_links=False)
         if not wb.sheetnames:
@@ -59,11 +65,14 @@ def _open_workbook(file_or_path):
 
 
 def _parse_single_sheet(
-    wb, sheet_name: str, sheet_rows: list, dim_no_row: int, dim_no_col: int, filename: str
+    wb: openpyxl.Workbook,
+    sheet_name: str,
+    sheet_rows: list,
+    dim_no_row: int,
+    dim_no_col: int,
+    filename: str,
 ) -> ParsedFile:
-    """
-    Parse a single sheet that has already been identified as containing
-    CPK data (i.e. has a "Dim. No." cell at the given position).
+    """Parse a single sheet that has already been identified as containing CPK data.
 
     This is the core parsing logic extracted from parse_excel so it can
     be reused for multi-sheet files.
@@ -118,9 +127,6 @@ def _parse_single_sheet(
 
     # ------------------------------------------------------------------
     # 3b. Merge numbered sub-dimensions (compact format)
-    #     e.g. SPC_HG, SPC_HG.01, SPC_HG.02 ... -> single "SPC_HG" group
-    #     Only applies when individual dims are single-column with no
-    #     point numbers (i.e. the compact format pattern).
     # ------------------------------------------------------------------
     result.dimensions = merge_dimension_groups(
         col_dim_no,
@@ -137,7 +143,6 @@ def _parse_single_sheet(
     # ------------------------------------------------------------------
     # 4. Find data start row (auto-detect header + data)
     # ------------------------------------------------------------------
-    # Search after the last known metadata row
     search_after = max(
         dim_no_row + 10,
         *(v for v in [usl_row, lsl_row, nominal_row, tol_max_row, tol_min_row] if v),
@@ -182,9 +187,8 @@ def _parse_single_sheet(
 # ---------------------------------------------------------------------------
 
 
-def parse_excel(file_or_path, sheet_name: str = "Raw data") -> ParsedFile:
-    """
-    Parse a vendor CPK Excel file and return structured data.
+def parse_excel(file_or_path: FileOrPath, sheet_name: str = "Raw data") -> ParsedFile:
+    """Parse a vendor CPK Excel file and return structured data.
 
     Auto-detects sheet layout by scanning for "Dim. No." marker cells.
     Works with any sheet name and column/row arrangement.
@@ -205,11 +209,11 @@ def parse_excel(file_or_path, sheet_name: str = "Raw data") -> ParsedFile:
     wb, filename = _open_workbook(file_or_path)
 
     # ----- Auto-detect which sheet(s) contain CPK data -----
-    _SHEET_ALIASES = {
+    _SHEET_ALIASES: dict[str, list[str]] = {
         "Raw data": ["Raw data", "Raw Data", "raw data", "PP data", "PP"],
         "Data Input": ["Data Input", "data input", "Data input"],
     }
-    candidate_sheets = []
+    candidate_sheets: list[str] = []
     # 1. Exact match
     if sheet_name in wb.sheetnames:
         candidate_sheets.append(sheet_name)
@@ -242,9 +246,10 @@ def parse_excel(file_or_path, sheet_name: str = "Raw data") -> ParsedFile:
     raise ValueError(f"No CPK data found in any sheet. Available sheets: {available}")
 
 
-def parse_excel_multi(file_or_path, sheet_name: str = "Raw data") -> list[ParsedFile]:
-    """
-    Parse a vendor CPK Excel file and return a list of ParsedFile objects.
+def parse_excel_multi(
+    file_or_path: FileOrPath, sheet_name: str = "Raw data"
+) -> list[ParsedFile]:
+    """Parse a vendor CPK Excel file and return a list of ParsedFile objects.
 
     If the requested sheet (e.g. "Raw data") exists, returns a single-element
     list (backward compatible).  If it does not exist, auto-detects ALL data
@@ -268,11 +273,11 @@ def parse_excel_multi(file_or_path, sheet_name: str = "Raw data") -> list[Parsed
     wb, filename = _open_workbook(file_or_path)
 
     # ----- Check for preferred sheet first -----
-    _SHEET_ALIASES = {
+    _SHEET_ALIASES: dict[str, list[str]] = {
         "Raw data": ["Raw data", "Raw Data", "raw data", "PP data", "PP"],
         "Data Input": ["Data Input", "data input", "Data input"],
     }
-    preferred_names = []
+    preferred_names: list[str] = []
     if sheet_name in wb.sheetnames:
         preferred_names.append(sheet_name)
     for alias in _SHEET_ALIASES.get(sheet_name, []):
@@ -294,7 +299,7 @@ def parse_excel_multi(file_or_path, sheet_name: str = "Raw data") -> list[Parsed
             return [result]
 
     # ----- No preferred sheet found: scan all sheets for data -----
-    results = []
+    results: list[ParsedFile] = []
     all_sheet_names = list(wb.sheetnames)  # capture before closing
     for sn in all_sheet_names:
         if _is_non_data_sheet(sn):

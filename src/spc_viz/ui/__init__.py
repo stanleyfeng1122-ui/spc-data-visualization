@@ -16,9 +16,10 @@ from .sidebar import (
     build_chart_controls,
     build_color_pickers,
 )
-from .state import prepare_and_clean
+from .state import ChartControls, prepare_and_clean
 
 __all__ = [
+    "ChartControls",
     "SECTION_FIELDS",
     "_build_chart_figure",
     "build_and_render_chart",

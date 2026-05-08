@@ -368,24 +368,24 @@ class TestHistogram:
 
 class TestBatchExport:
     def test_build_chart_figure_combined(self, multi_point_data, common_kwargs):
-        from spc_viz.ui import _build_chart_figure
+        from spc_viz.ui import ChartControls, _build_chart_figure
 
         df, dim_metas = multi_point_data
-        controls = {
-            "chart_type": "Combined Profile",
-            "color_by": "None",
-            "row_by": "None",
-            "section_by_fields": ["Factory"],
-            "y_axis_mode": "Measurement values",
-            "custom_yrange": None,
-            "hist_nbins": 30,
-        }
+        controls = ChartControls(
+            chart_type="Combined Profile",
+            color_by="None",
+            row_by="None",
+            section_by_fields=["Factory"],
+            y_axis_mode="Measurement values",
+            custom_yrange=None,
+            hist_nbins=30,
+        )
         fig = _build_chart_figure(
             df,
             dim_metas,
             ["SPC_HG"],
             controls,
-            None,
+            {},
             False,
             "Test",
             None,
@@ -394,24 +394,24 @@ class TestBatchExport:
         assert len(fig.data) > 0
 
     def test_build_chart_figure_box(self, single_point_data, common_kwargs):
-        from spc_viz.ui import _build_chart_figure
+        from spc_viz.ui import ChartControls, _build_chart_figure
 
         df, dim_metas = single_point_data
-        controls = {
-            "chart_type": "Box Plot",
-            "color_by": "None",
-            "row_by": "None",
-            "section_by_fields": ["Factory"],
-            "y_axis_mode": "Measurement values",
-            "custom_yrange": None,
-            "hist_nbins": 30,
-        }
+        controls = ChartControls(
+            chart_type="Box Plot",
+            color_by="None",
+            row_by="None",
+            section_by_fields=["Factory"],
+            y_axis_mode="Measurement values",
+            custom_yrange=None,
+            hist_nbins=30,
+        )
         fig = _build_chart_figure(
             df,
             dim_metas,
             ["SPC_C1"],
             controls,
-            None,
+            {},
             False,
             "Test",
             None,

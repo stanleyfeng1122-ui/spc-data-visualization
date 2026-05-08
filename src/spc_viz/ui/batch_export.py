@@ -1,20 +1,24 @@
 """Sidebar expander for batch chart export — one PNG per selected dimension, zipped."""
 
+from __future__ import annotations
+
 from collections import OrderedDict
 
 import streamlit as st
 
+from spc_viz.parsers.dimensions import DimensionMeta
+
 from .chart_view import _build_chart_figure
-from .state import prepare_and_clean
+from .state import ChartControls, prepare_and_clean
 
 
 def render_batch_export(
-    all_dimensions: OrderedDict,
-    parsed_files: list,
-    controls: dict,
+    all_dimensions: OrderedDict[str, DimensionMeta],
+    parsed_files: list[dict],
+    controls: ChartControls,
     exclude_intervals: bool,
-    selected_points: list | None,
-    custom_color_map: dict,
+    selected_points: list[str] | None,
+    custom_color_map: dict[str, str],
     key_prefix: str = "",
 ) -> None:
     """Sidebar expander that batch-exports one chart per selected dimension."""
@@ -24,13 +28,13 @@ def render_batch_export(
 
     from streamlit.runtime.scriptrunner import StopException
 
-    dim_display_map = OrderedDict()
+    dim_display_map: OrderedDict[str, str] = OrderedDict()
     for dno, dmeta in all_dimensions.items():
         label = f"{dno} — {dmeta.description}" if dmeta.description else dno
         dim_display_map[label] = dno
 
     with st.sidebar.expander("Batch Chart Export", expanded=False):
-        batch_dims = st.multiselect(
+        batch_dims: list[str] = st.multiselect(
             "Dimensions to export",
             options=list(dim_display_map.keys()),
             default=[],
@@ -41,7 +45,7 @@ def render_batch_export(
             st.caption("Pick dimensions above, then click Export.")
             return
 
-        export_btn = st.button(
+        export_btn: bool = st.button(
             f"Export {len(batch_dims)} chart{'s' if len(batch_dims) != 1 else ''}",
             key=f"{key_prefix}batch_export_btn",
         )
@@ -50,7 +54,7 @@ def render_batch_export(
             return
 
         # --- Generate charts ---
-        ct = controls["chart_type"]
+        ct = controls.chart_type
         progress = st.progress(0, text="Preparing export…")
         images: list[tuple[str, bytes]] = []
         skipped: list[str] = []
@@ -92,7 +96,7 @@ def render_batch_export(
 
             # Convert to PNG
             try:
-                png_bytes = fig.to_image(
+                png_bytes: bytes = fig.to_image(
                     format="png",
                     width=1400,
                     height=700,

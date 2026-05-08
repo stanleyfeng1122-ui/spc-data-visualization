@@ -6,6 +6,8 @@ layer. Extracted from the original ``chart_utils`` module without
 behavioural changes.
 """
 
+from __future__ import annotations
+
 import re
 from collections import OrderedDict
 
@@ -16,7 +18,7 @@ from scipy import stats as scipy_stats
 # ---------------------------------------------------------------------------
 # Color palettes (no purple)
 # ---------------------------------------------------------------------------
-COLOR_PALETTE = [
+COLOR_PALETTE: list[str] = [
     "#2563EB",  # blue
     "#DC2626",  # red
     "#059669",  # green
@@ -29,10 +31,11 @@ COLOR_PALETTE = [
     "#64748B",  # slate
 ]
 
-MAX_TRACES_PER_GROUP = 600
+MAX_TRACES_PER_GROUP: int = 600
 
 
 def get_color_for_group(idx: int) -> str:
+    """Return a hex color string for a given group index (cycles through palette)."""
     return COLOR_PALETTE[idx % len(COLOR_PALETTE)]
 
 
@@ -41,12 +44,12 @@ def get_color_for_group(idx: int) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _get_factory(pf):
+def _get_factory(pf: dict) -> str:
     """Get factory code for a parsed file dict."""
     return pf.get("factory") or "Unknown"
 
 
-def _find_matching_dim(pf_dims, target_dno):
+def _find_matching_dim(pf_dims: OrderedDict, target_dno: str) -> str | None:
     """Find a dimension in pf_dims that matches target_dno.
 
     Handles naming variations like SPC_A vs SPC_A-1 by comparing
@@ -60,7 +63,7 @@ def _find_matching_dim(pf_dims, target_dno):
     # e.g. "SPC_A-1" base is "SPC_A", "SPC_A" base is "SPC_A"
     target_base = re.sub(r"-\d+$", "", target_dno)
 
-    for candidate_dno, candidate_meta in pf_dims.items():
+    for candidate_dno in pf_dims:
         candidate_base = re.sub(r"-\d+$", "", candidate_dno)
         if candidate_base == target_base:
             return candidate_dno
@@ -68,16 +71,19 @@ def _find_matching_dim(pf_dims, target_dno):
     return None
 
 
-def prepare_combined_data(parsed_files, dim_nos):
-    """
-    Combine data from all files for the requested dimensions.
+def prepare_combined_data(
+    parsed_files: list[dict],
+    dim_nos: list[str],
+) -> tuple[pd.DataFrame | None, OrderedDict | None]:
+    """Combine data from all files for the requested dimensions.
+
     Returns (df, dim_metas_dict) where df has all rows and a _factory column.
 
     Handles dimension name variations between files (e.g. SPC_A vs SPC_A-1)
     by fuzzy-matching on base dimension name and renaming columns to align.
     """
-    frames = []
-    dim_metas = OrderedDict()
+    frames: list[pd.DataFrame] = []
+    dim_metas: OrderedDict = OrderedDict()
 
     # First pass: collect canonical dim_metas from the first file that has each dim
     for pf in parsed_files:
@@ -94,8 +100,8 @@ def prepare_combined_data(parsed_files, dim_nos):
         df["_source_file"] = pf["filename"]
 
         meta_cols = [c for c in pf["meta_columns"] if c in df.columns]
-        meas_cols = []
-        rename_map = {}
+        meas_cols: list[str] = []
+        rename_map: dict[str, str] = {}
 
         for dno in dim_nos:
             match = _find_matching_dim(pf["dimensions"], dno)
@@ -117,8 +123,8 @@ def prepare_combined_data(parsed_files, dim_nos):
             meas_cols.extend([c for c in local_meta.col_labels if c in df.columns])
 
         # Deduplicate while preserving order
-        seen = set()
-        meas_cols_dedup = []
+        seen: set[str] = set()
+        meas_cols_dedup: list[str] = []
         for c in meas_cols:
             if c not in seen:
                 seen.add(c)
@@ -146,15 +152,15 @@ def prepare_combined_data(parsed_files, dim_nos):
 # ---------------------------------------------------------------------------
 
 
-def compute_sections(df, section_by_fields):
-    """
-    Assign a section label to each row based on selected fields.
+def compute_sections(df: pd.DataFrame, section_by_fields: list[str]) -> pd.Series:
+    """Assign a section label to each row based on selected fields.
+
     Returns a Series of section labels aligned with df index.
     """
     if not section_by_fields:
         return pd.Series("All", index=df.index)
 
-    def _get_col(field_name):
+    def _get_col(field_name: str) -> pd.Series:
         if field_name == "Factory":
             if "_factory" in df.columns:
                 return df["_factory"].fillna("?").astype(str)
@@ -168,15 +174,15 @@ def compute_sections(df, section_by_fields):
         return pd.Series("?", index=df.index)
 
     parts = [_get_col(f) for f in section_by_fields]
-    combined = parts[0]
+    combined: pd.Series = parts[0]
     for p in parts[1:]:
         combined = combined + " " + p
     return combined
 
 
-def compute_row_groups(df, row_by):
-    """
-    Assign a row group label to each row based on row_by field.
+def compute_row_groups(df: pd.DataFrame, row_by: str) -> pd.Series:
+    """Assign a row group label to each row based on row_by field.
+
     Returns a Series of row labels aligned with df index.
     """
     if row_by == "None" or row_by not in df.columns:
@@ -189,7 +195,11 @@ def compute_row_groups(df, row_by):
 # ---------------------------------------------------------------------------
 
 
-def calc_process_capability(data_series, usl_val, lsl_val):
+def calc_process_capability(
+    data_series: pd.Series,
+    usl_val: float | None,
+    lsl_val: float | None,
+) -> dict | None:
     """Calculate Cp, Cpk, Pp, Ppk, sigma level, DPMO, and yield %."""
     data = data_series.dropna()
     if len(data) < 2:
@@ -198,7 +208,7 @@ def calc_process_capability(data_series, usl_val, lsl_val):
     std_within = data.std(ddof=1)
     std_overall = data.std(ddof=0)
 
-    result = {"n": len(data), "mean": round(mean, 6), "std": round(std_within, 6)}
+    result: dict = {"n": len(data), "mean": round(mean, 6), "std": round(std_within, 6)}
 
     if usl_val is not None and lsl_val is not None and std_within > 0:
         cp = (usl_val - lsl_val) / (6 * std_within)
@@ -239,9 +249,11 @@ def calc_process_capability(data_series, usl_val, lsl_val):
     return result
 
 
-def nelson_rules(data_series):
+def nelson_rules(data_series: pd.Series) -> dict[str, list[int]]:
     """Detect Nelson rule violations for trend & shift detection.
-    Returns a dict of rule_name -> list of violating indices."""
+
+    Returns a dict of rule_name -> list of violating indices.
+    """
     data = data_series.dropna().values
     n = len(data)
     if n < 9:
@@ -251,13 +263,13 @@ def nelson_rules(data_series):
     if std == 0:
         return {}
 
-    violations = {}
+    violations: dict[str, list[int]] = {}
 
     r1 = [i for i in range(n) if abs(data[i] - mean) > 3 * std]
     if r1:
         violations["Rule 1: Beyond 3s"] = r1
 
-    r2 = []
+    r2: list[int] = []
     for i in range(n - 8):
         segment = data[i : i + 9]
         if all(s > mean for s in segment) or all(s < mean for s in segment):
@@ -265,7 +277,7 @@ def nelson_rules(data_series):
     if r2:
         violations["Rule 2: 9 pts same side"] = sorted(set(r2))
 
-    r3 = []
+    r3: list[int] = []
     for i in range(n - 5):
         seg = data[i : i + 6]
         diffs = np.diff(seg)
@@ -274,7 +286,7 @@ def nelson_rules(data_series):
     if r3:
         violations["Rule 3: 6 pts trend"] = sorted(set(r3))
 
-    r4 = []
+    r4: list[int] = []
     for i in range(n - 13):
         seg = data[i : i + 14]
         diffs = np.diff(seg)
@@ -284,7 +296,7 @@ def nelson_rules(data_series):
     if r4:
         violations["Rule 4: 14 pts alternating"] = sorted(set(r4))
 
-    r5 = []
+    r5: list[int] = []
     for i in range(n - 2):
         seg = data[i : i + 3]
         above = sum(1 for s in seg if s > mean + 2 * std)
@@ -294,7 +306,7 @@ def nelson_rules(data_series):
     if r5:
         violations["Rule 5: 2/3 beyond 2s"] = sorted(set(r5))
 
-    r6 = []
+    r6: list[int] = []
     for i in range(n - 14):
         seg = data[i : i + 15]
         if all(abs(s - mean) < std for s in seg):
@@ -305,7 +317,12 @@ def nelson_rules(data_series):
     return violations
 
 
-def cusum_analysis(data_series, target=None, h=5.0, k=0.5):
+def cusum_analysis(
+    data_series: pd.Series,
+    target: float | None = None,
+    h: float = 5.0,
+    k: float = 0.5,
+) -> tuple[np.ndarray | None, np.ndarray | None, list[int]]:
     """CUSUM (Cumulative Sum) analysis for shift detection."""
     data = data_series.dropna().values
     n = len(data)
@@ -318,7 +335,7 @@ def cusum_analysis(data_series, target=None, h=5.0, k=0.5):
 
     cusum_pos = np.zeros(n)
     cusum_neg = np.zeros(n)
-    shift_points = []
+    shift_points: list[int] = []
 
     for i in range(n):
         zi = (data[i] - mean) / std

@@ -4,14 +4,18 @@ Builds the per-point profile chart with optional row facets and section
 groupings. Pure code movement from the original ``chart_utils`` module.
 """
 
+from __future__ import annotations
+
 from collections import OrderedDict
 
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
+from plotly.graph_objects import Figure
 from plotly.subplots import make_subplots
 
 from spc_viz.parsers import get_filtered_dim_meta
+from spc_viz.parsers.dimensions import DimensionMeta
 
 from .base import (
     MAX_TRACES_PER_GROUP,
@@ -20,26 +24,25 @@ from .base import (
     get_color_for_group,
 )
 
-
 # ---------------------------------------------------------------------------
 # Chart building -- combined profile view
 # ---------------------------------------------------------------------------
 
 
 def build_combined_chart(
-    df,
-    dim_metas: OrderedDict,
-    dim_nos: list,
-    section_by_fields: list,
+    df: pd.DataFrame,
+    dim_metas: OrderedDict[str, DimensionMeta],
+    dim_nos: list[str],
+    section_by_fields: list[str],
     color_by: str,
     y_axis_mode: str,
     exclude_intervals: bool,
     group_label: str,
     row_by: str = "None",
-    custom_color_map: dict = None,
-    custom_yrange: list = None,
-    selected_points: list = None,
-):
+    custom_color_map: dict[str, str] | None = None,
+    custom_yrange: list[float] | None = None,
+    selected_points: list[str] | None = None,
+) -> Figure | None:
     """Build the combined profile chart with section and row facets."""
     deviation_mode = y_axis_mode == "Deviation from Nominal"
 
@@ -66,9 +69,9 @@ def build_combined_chart(
         color_map = {g: get_color_for_group(i) for i, g in enumerate(unique_colors)}
 
     # Normalise selected_points to a set for O(1) lookup; None/empty means show all
-    _point_filter = set(selected_points) if selected_points else None
+    _point_filter: set[str] | None = set(selected_points) if selected_points else None
 
-    dim_point_info = OrderedDict()
+    dim_point_info: OrderedDict[str, tuple[list[str], list[str], list, list, list]] = OrderedDict()
     for dno in dim_nos:
         if dno not in dim_metas:
             continue
@@ -81,7 +84,7 @@ def build_combined_chart(
             if cl in df.columns and (_point_filter is None or pn in _point_filter)
         ]
         if valid:
-            cls, pns, noms, usls, lsls = zip(*valid)
+            cls, pns, noms, usls, lsls = zip(*valid)  # type: ignore[assignment]
             dim_point_info[dno] = (list(cls), list(pns), list(noms), list(usls), list(lsls))
 
     if not dim_point_info:
@@ -94,7 +97,7 @@ def build_combined_chart(
     section_gap = max(3, int(points_per_section * 0.06))
 
     if use_row_facets:
-        fig = make_subplots(
+        fig: Figure = make_subplots(
             rows=n_rows,
             cols=1,
             shared_xaxes=True,
@@ -109,19 +112,19 @@ def build_combined_chart(
     lsl_rep = next((v for v in first_dim_info[4] if v is not None), None)
     nom_rep = next((v for v in first_dim_info[2] if v is not None), None)
 
-    legend_shown = set()
+    legend_shown: set[str] = set()
 
-    all_tick_vals = []
-    all_tick_text = []
-    section_boundaries = []
+    all_tick_vals: list[int] = []
+    all_tick_text: list[str] = []
+    section_boundaries: list[float] = []
 
     x_offset = 0
-    section_x_ranges = {}
-    dim_x_positions = OrderedDict()
+    section_x_ranges: dict[str, tuple[int, int]] = {}
+    dim_x_positions: OrderedDict[tuple[str, str], list[int]] = OrderedDict()
 
     for sec_idx, sec_label in enumerate(unique_sections):
         section_start_x = x_offset
-        for dno, (col_labels, point_nums, nominals, usls, lsls) in dim_point_info.items():
+        for dno, (col_labels, point_nums, nominals, usls, lsls) in dim_point_info.items():  # type: ignore[assignment]
             n_points = len(col_labels)
             x_positions = list(range(x_offset, x_offset + n_points))
             dim_x_positions[(sec_label, dno)] = x_positions
@@ -150,7 +153,7 @@ def build_combined_chart(
             if cell_df.empty:
                 continue
 
-            for dno, (col_labels, point_nums, nominals, usls, lsls) in dim_point_info.items():
+            for dno, (col_labels, point_nums, nominals, usls, lsls) in dim_point_info.items():  # type: ignore[assignment]
                 x_positions = dim_x_positions[(sec_label, dno)]
                 nom_array = np.array(
                     [n if n is not None else np.nan for n in nominals],
@@ -181,7 +184,7 @@ def build_combined_chart(
                         show_legend = grp_name not in legend_shown
                         legend_shown.add(grp_name)
 
-                        trace_kwargs = dict(
+                        trace_kwargs: dict = dict(
                             x=x_positions,
                             y=y_vals,
                             mode=trace_mode,
@@ -237,7 +240,7 @@ def build_combined_chart(
     for bx in section_boundaries:
         fig.add_vline(x=bx, line=dict(color="rgba(100,116,139,0.5)", width=1.5, dash="solid"))
 
-    annotations = []
+    annotations: list[dict] = []
 
     is_group = len(dim_nos) > 1
     if is_group:
@@ -264,8 +267,8 @@ def build_combined_chart(
             title_text += f", {first_desc}"
     else:
         dno = dim_nos[0]
-        dmeta = dim_metas.get(dno)
-        desc = dmeta.description if dmeta else ""
+        dmeta_opt = dim_metas.get(dno)
+        desc = dmeta_opt.description if dmeta_opt else ""
         title_text = f"{dno}, {desc}" if desc else dno
 
     subtitle = ""  # Don't show section field names (e.g. "Factory") as subtitle
@@ -312,8 +315,8 @@ def build_combined_chart(
         template="plotly_white",
     )
 
-    spec_tickvals = []
-    spec_ticktext = []
+    spec_tickvals: list[float] = []
+    spec_ticktext: list[str] = []
     if usl_rep is not None:
         ref_usl = (usl_rep - nom_rep) if (deviation_mode and nom_rep is not None) else usl_rep
         spec_tickvals.append(ref_usl)
@@ -370,8 +373,8 @@ def build_combined_chart(
     # ----- Factory / section header bands (paper coordinates) -----
     total_x_span = x_offset  # total x-axis data range
     if total_x_span > 0 and len(unique_sections) > 1:
-        header_shapes = []
-        section_centers = []
+        header_shapes: list[dict] = []
+        section_centers: list[tuple[float, str]] = []
         for sec_label, (sx0, sx1) in section_x_ranges.items():
             # Map data x-range to paper coordinates [0, 1]
             px0 = sx0 / total_x_span

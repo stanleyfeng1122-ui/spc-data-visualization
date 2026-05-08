@@ -58,19 +58,19 @@ class ParsedFile:
 # ---------------------------------------------------------------------------
 
 
-def _safe_str(val) -> str:
+def _safe_str(val: object) -> str:
     """Convert a cell value to a stripped string, or empty string if None."""
     if val is None:
         return ""
     return str(val).strip()
 
 
-def _safe_num(val):
+def _safe_num(val: object) -> float | None:
     """Return a float if numeric, else None."""
     if val is None:
         return None
     try:
-        return float(val)
+        return float(val)  # type: ignore[arg-type]
     except (ValueError, TypeError):
         return None
 
@@ -86,8 +86,7 @@ def _is_interval_point(point_label: str) -> bool:
 
 
 def detect_dimension_groups(dimensions: OrderedDict) -> dict[str, list[str]]:
-    """
-    Auto-detect dimension groups by analysing description keywords.
+    """Auto-detect dimension groups by analysing description keywords.
 
     Returns a dict of group_display_name -> list of dim_no strings.
     Groups dimensions that share a common keyword in their description.
@@ -138,10 +137,10 @@ def detect_dimension_groups(dimensions: OrderedDict) -> dict[str, list[str]]:
 
 
 def _extract_group_keyword(description: str) -> str:
-    """
-    Extract a grouping keyword from a dimension description.
+    """Extract a grouping keyword from a dimension description.
 
-    Examples:
+    Examples::
+
         "z straightness of left"       -> "z_straightness"
         "z straightness of front"      -> "z_straightness"
         "flatness of Datum A"          -> "flatness"
@@ -153,7 +152,7 @@ def _extract_group_keyword(description: str) -> str:
     desc = description.lower().strip()
 
     # Try matching known patterns (most specific first)
-    patterns = [
+    patterns: list[tuple[str, str]] = [
         (r"z\s*straightness", "z_straightness"),
         (r"flatness", "flatness"),
         (r"overall\s*length", "overall_length"),
@@ -179,9 +178,9 @@ def get_filtered_dim_meta(
     dmeta: DimensionMeta,
     exclude_intervals: bool = True,
 ) -> tuple[list[str], list[str], list, list, list]:
-    """
-    Return filtered lists of (col_labels, point_numbers, nominal, usl, lsl)
-    optionally excluding interval points (e.g. "C11-C12").
+    """Return filtered lists of (col_labels, point_numbers, nominal, usl, lsl).
+
+    Optionally excludes interval points (e.g. "C11-C12").
 
     Parameters
     ----------
@@ -193,11 +192,11 @@ def get_filtered_dim_meta(
     -------
     (col_labels, point_numbers, nominal, usl, lsl) -- filtered lists
     """
-    col_labels = []
-    point_numbers = []
-    nominal = []
-    usl = []
-    lsl = []
+    col_labels: list[str] = []
+    point_numbers: list[str] = []
+    nominal: list = []
+    usl: list = []
+    lsl: list = []
 
     for i, pt in enumerate(dmeta.point_numbers):
         if exclude_intervals and _is_interval_point(pt):
@@ -216,23 +215,20 @@ def get_filtered_dim_meta(
 # ---------------------------------------------------------------------------
 
 
-def get_dimension_options(parsed: ParsedFile) -> list:
-    """
-    Return a list of (display_label, dim_no) tuples for the dimension selector.
-    """
-    options = []
+def get_dimension_options(parsed: ParsedFile) -> list[tuple[str, str]]:
+    """Return a list of (display_label, dim_no) tuples for the dimension selector."""
+    options: list[tuple[str, str]] = []
     for dno, dmeta in parsed.dimensions.items():
         label = f"{dno} - {dmeta.description}" if dmeta.description else dno
         options.append((label, dno))
     return options
 
 
-def get_groupable_columns(parsed: ParsedFile) -> list:
-    """
-    Return the list of metadata column names that can be used for
-    X-axis grouping or color-by.
-    """
-    usable = []
+def get_groupable_columns(parsed: ParsedFile) -> list[str]:
+    """Return the list of metadata column names that can be used for X-axis grouping or color-by."""
+    usable: list[str] = []
+    if parsed.data is None:
+        return usable
     for name in parsed.meta_columns:
         if name == "Start Point":
             continue

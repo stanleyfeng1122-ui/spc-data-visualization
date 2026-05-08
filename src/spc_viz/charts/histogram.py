@@ -5,17 +5,20 @@ faceting and spec-limit overlays. Pure code movement from the original
 ``chart_utils`` module.
 """
 
+from __future__ import annotations
+
 from collections import OrderedDict
 
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
+from plotly.graph_objects import Figure
 from plotly.subplots import make_subplots
 
 from spc_viz.parsers import get_filtered_dim_meta
+from spc_viz.parsers.dimensions import DimensionMeta
 
 from .base import compute_row_groups, get_color_for_group
-
 
 # ---------------------------------------------------------------------------
 # Chart building -- histogram
@@ -23,20 +26,20 @@ from .base import compute_row_groups, get_color_for_group
 
 
 def build_histogram(
-    df,
-    dim_metas: OrderedDict,
-    dim_nos: list,
+    df: pd.DataFrame,
+    dim_metas: OrderedDict[str, DimensionMeta],
+    dim_nos: list[str],
     color_by: str,
     exclude_intervals: bool,
     group_label: str,
     nbins: int = 40,
     row_by: str = "None",
-    custom_color_map: dict = None,
-    selected_points: list = None,
-):
+    custom_color_map: dict[str, str] | None = None,
+    selected_points: list[str] | None = None,
+) -> Figure | None:
     """Build a histogram showing frequency distribution of measurement values."""
     # Normalise selected_points to a set for O(1) lookup; None/empty means show all
-    _point_filter = set(selected_points) if selected_points else None
+    _point_filter: set[str] | None = set(selected_points) if selected_points else None
 
     valid_dim_nos = [d for d in dim_nos if d in dim_metas]
     n_dim_cols = len(valid_dim_nos)
@@ -65,8 +68,9 @@ def build_histogram(
     n_rows = max(n_facet_rows, 1)
     use_subplots = n_cols > 1 or n_rows > 1
 
+    fig: Figure
     if use_subplots:
-        subplot_titles = []
+        subplot_titles: list[str] = []
         for r_label in unique_rows:
             for dno in valid_dim_nos:
                 if n_rows > 1 and n_cols > 1:
@@ -85,7 +89,7 @@ def build_histogram(
     else:
         fig = go.Figure()
 
-    legend_shown = set()
+    legend_shown: set[str] = set()
 
     for row_idx, row_label in enumerate(unique_rows):
         plotly_row = row_idx + 1
@@ -138,7 +142,7 @@ def build_histogram(
                 else:
                     fig.add_trace(trace)
 
-            line_kwargs = dict(row=plotly_row, col=col_idx) if use_subplots else {}
+            line_kwargs: dict = dict(row=plotly_row, col=col_idx) if use_subplots else {}
             dash_style = dict(dash="dash", width=1.5)
             if usl_val is not None:
                 fig.add_vline(

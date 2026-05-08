@@ -23,9 +23,7 @@ def build_meta_col_map(
     data_col_start: int,
     label_rows: dict,
 ) -> OrderedDict:
-    """
-    Build the ordered mapping ``column_name -> 1-based column index`` for every
-    metadata column present in the sheet.
+    """Build the ordered mapping ``column_name -> 1-based column index``.
 
     Two strategies:
 
@@ -54,7 +52,7 @@ def build_meta_col_map(
                 break
             meta_col_map[val] = ci
             if val.lower() == "sn":
-                sn_col = ci
+                sn_col = ci  # noqa: F841 — kept for parity with original logic
     else:
         # No header row -- check if there's an SN / serial column
         # (compact format has "SN" at label_col-1, serial numbers at label_col-1)
@@ -71,8 +69,8 @@ def build_meta_col_map(
 
 
 def coerce_shipment_date(df: pd.DataFrame) -> None:
-    """
-    Convert the Shipment Date column (if present) to ``datetime``.
+    """Convert the Shipment Date column (if present) to ``datetime``.
+
     Mutates the dataframe in place.
     """
     if "Shipment Date" in df.columns:
@@ -80,14 +78,17 @@ def coerce_shipment_date(df: pd.DataFrame) -> None:
 
 
 def detect_factory(result: ParsedFile, filename: str) -> None:
-    """
-    Detect factory / site code on the given ``ParsedFile`` and assign it to
-    ``result.factory``. Tries three strategies in order:
+    """Detect factory / site code on the given ``ParsedFile`` and assign it.
+
+    Tries three strategies in order:
 
     1. The ``Vendor Serial Number`` column's mode value.
     2. A 2–4 letter prefix at the start of the first ``SN`` value.
     3. The first underscore-delimited token of the filename (e.g. "FX_K116_…").
     """
+    if result.data is None:
+        return
+
     if "Vendor Serial Number" in result.data.columns:
         vsn_vals = result.data["Vendor Serial Number"].dropna().astype(str)
         if len(vsn_vals) > 0:

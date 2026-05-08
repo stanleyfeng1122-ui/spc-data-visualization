@@ -5,16 +5,19 @@ with optional row facets, color grouping, and spec-limit overlays.
 Pure code movement from the original ``chart_utils`` module.
 """
 
+from __future__ import annotations
+
 from collections import OrderedDict
 
 import pandas as pd
 import plotly.graph_objects as go
+from plotly.graph_objects import Figure
 from plotly.subplots import make_subplots
 
 from spc_viz.parsers import get_filtered_dim_meta
+from spc_viz.parsers.dimensions import DimensionMeta
 
 from .base import compute_row_groups, get_color_for_group
-
 
 # ---------------------------------------------------------------------------
 # Chart building -- box plot
@@ -22,23 +25,23 @@ from .base import compute_row_groups, get_color_for_group
 
 
 def build_box_plot(
-    df,
-    dim_metas: OrderedDict,
-    dim_nos: list,
+    df: pd.DataFrame,
+    dim_metas: OrderedDict[str, DimensionMeta],
+    dim_nos: list[str],
     color_by: str,
     y_axis_mode: str,
     exclude_intervals: bool,
     group_label: str,
     row_by: str = "None",
-    custom_color_map: dict = None,
-    custom_yrange: list = None,
-    selected_points: list = None,
-):
+    custom_color_map: dict[str, str] | None = None,
+    custom_yrange: list[float] | None = None,
+    selected_points: list[str] | None = None,
+) -> Figure | None:
     """Build a box plot showing the distribution of measurements at each point."""
     deviation_mode = y_axis_mode == "Deviation from Nominal"
 
     # Normalise selected_points to a set for O(1) lookup; None/empty means show all
-    _point_filter = set(selected_points) if selected_points else None
+    _point_filter: set[str] | None = set(selected_points) if selected_points else None
 
     row_labels = compute_row_groups(df, row_by)
     unique_rows = list(dict.fromkeys(row_labels))
@@ -59,6 +62,7 @@ def build_box_plot(
     else:
         color_map = {g: get_color_for_group(i) for i, g in enumerate(unique_colors)}
 
+    fig: Figure
     if use_row_facets:
         fig = make_subplots(
             rows=n_rows,
@@ -70,7 +74,7 @@ def build_box_plot(
     else:
         fig = go.Figure()
 
-    legend_shown = set()
+    legend_shown: set[str] = set()
     multi_dim = len(dim_nos) > 1
     rep_usl, rep_lsl, rep_nom = None, None, None
 
@@ -167,8 +171,8 @@ def build_box_plot(
                 **rk,
             )
 
-    spec_tickvals = []
-    spec_ticktext = []
+    spec_tickvals: list[float] = []
+    spec_ticktext: list[str] = []
     if rep_usl is not None:
         ref_usl_v = (rep_usl - rep_nom) if (deviation_mode and rep_nom is not None) else rep_usl
         spec_tickvals.append(ref_usl_v)
@@ -205,7 +209,7 @@ def build_box_plot(
         template="plotly_white",
     )
 
-    spec_annotations = []
+    spec_annotations: list[dict] = []
     for val, label in zip(spec_tickvals, spec_ticktext):
         spec_annotations.append(
             dict(

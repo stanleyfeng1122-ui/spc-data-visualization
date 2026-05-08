@@ -99,11 +99,11 @@ def common_kwargs():
 
 class TestImports:
     def test_shared_ui_imports(self):
-        import shared_ui
+        from spc_viz import ui
 
-        assert hasattr(shared_ui, "build_and_render_chart")
-        assert hasattr(shared_ui, "_build_chart_figure")
-        assert hasattr(shared_ui, "render_batch_export")
+        assert hasattr(ui, "build_and_render_chart")
+        assert hasattr(ui, "_build_chart_figure")
+        assert hasattr(ui, "render_batch_export")
 
     def test_chart_utils_imports(self):
         from spc_viz import charts
@@ -364,7 +364,7 @@ class TestHistogram:
 
 class TestBatchExport:
     def test_build_chart_figure_combined(self, multi_point_data, common_kwargs):
-        from shared_ui import _build_chart_figure
+        from spc_viz.ui import _build_chart_figure
 
         df, dim_metas = multi_point_data
         controls = {
@@ -390,7 +390,7 @@ class TestBatchExport:
         assert len(fig.data) > 0
 
     def test_build_chart_figure_box(self, single_point_data, common_kwargs):
-        from shared_ui import _build_chart_figure
+        from spc_viz.ui import _build_chart_figure
 
         df, dim_metas = single_point_data
         controls = {

@@ -19,7 +19,9 @@ from collections import OrderedDict
 import streamlit as st
 import streamlit.components.v1 as components
 
-from shared_ui import (
+from spc_viz.parsers import _open_workbook, parse_excel_multi
+from spc_viz.theme import inject_theme
+from spc_viz.ui import (
     build_and_render_chart,
     build_chart_controls,
     build_color_pickers,
@@ -27,10 +29,7 @@ from shared_ui import (
     build_point_filter,
     prepare_and_clean,
     render_batch_export,
-    render_summary_statistics,
 )
-from spc_viz.parsers import _open_workbook, parse_excel_multi
-from spc_viz.theme import inject_theme
 
 # ---------------------------------------------------------------------------
 # Page config
@@ -301,19 +300,6 @@ if controls["chart_type"] == "Combined Profile":
 </script>
 """
     components.html(_highlight_js, height=0)
-
-# ---------------------------------------------------------------------------
-# Summary Statistics
-# ---------------------------------------------------------------------------
-render_summary_statistics(
-    df_clean,
-    dim_metas,
-    selected_dim_nos,
-    exclude_intervals=exclude_intervals,
-    color_by=controls["color_by"],
-    custom_color_map=custom_color_map,
-    key_prefix=KP,
-)
 
 # ---------------------------------------------------------------------------
 # Batch Chart Export

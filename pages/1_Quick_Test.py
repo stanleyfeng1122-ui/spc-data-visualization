@@ -17,7 +17,9 @@ _project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _project_root not in sys.path:
     sys.path.insert(0, _project_root)
 
-from shared_ui import (
+from spc_viz.parsers import parse_excel_multi
+from spc_viz.theme import FONT_MONO, TEXT_MUTED, inject_theme
+from spc_viz.ui import (
     build_and_render_chart,
     build_chart_controls,
     build_color_pickers,
@@ -25,10 +27,7 @@ from shared_ui import (
     build_point_filter,
     prepare_and_clean,
     render_batch_export,
-    render_summary_statistics,
 )
-from spc_viz.parsers import parse_excel_multi
-from spc_viz.theme import FONT_MONO, TEXT_MUTED, inject_theme
 
 # ---------------------------------------------------------------------------
 # Page config
@@ -191,19 +190,6 @@ build_and_render_chart(
     exclude_intervals,
     selected_group_label,
     selected_points,
-    key_prefix=KP,
-)
-
-# ---------------------------------------------------------------------------
-# Summary Statistics
-# ---------------------------------------------------------------------------
-render_summary_statistics(
-    df_clean,
-    dim_metas,
-    selected_dim_nos,
-    exclude_intervals=exclude_intervals,
-    color_by=controls["color_by"],
-    custom_color_map=custom_color_map,
     key_prefix=KP,
 )
 

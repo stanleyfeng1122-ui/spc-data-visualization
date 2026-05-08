@@ -19,7 +19,7 @@ import pytest
 # Ensure project root is importable
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from chart_utils import (
+from spc_viz.charts import (
     build_box_plot,
     build_combined_chart,
     build_histogram,
@@ -106,11 +106,11 @@ class TestImports:
         assert hasattr(shared_ui, "render_batch_export")
 
     def test_chart_utils_imports(self):
-        import chart_utils
+        from spc_viz import charts
 
-        assert hasattr(chart_utils, "build_combined_chart")
-        assert hasattr(chart_utils, "build_box_plot")
-        assert hasattr(chart_utils, "build_histogram")
+        assert hasattr(charts, "build_combined_chart")
+        assert hasattr(charts, "build_box_plot")
+        assert hasattr(charts, "build_histogram")
 
     def test_spc_parser_imports(self):
         from spc_viz import parsers as spc_parser

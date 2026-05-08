@@ -15,7 +15,7 @@ import plotly.graph_objects as go
 import streamlit as st
 from scipy import stats as scipy_stats
 
-from chart_utils import (
+from spc_viz.charts import (
     build_box_plot,
     build_combined_chart,
     build_histogram,

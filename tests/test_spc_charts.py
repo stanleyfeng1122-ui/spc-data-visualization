@@ -131,15 +131,19 @@ class TestImports:
 
 
 class TestDataLoading:
+    def _examples_dir(self):
+        from spc_viz.config.paths import EXAMPLES_DIR
+        return str(EXAMPLES_DIR)
+
     def test_xlsx_files_exist(self):
-        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        root = self._examples_dir()
         xlsx = [f for f in os.listdir(root) if f.endswith(".xlsx") and not f.startswith("~$")]
-        assert len(xlsx) > 0, "No .xlsx files in project directory"
+        assert len(xlsx) > 0, f"No .xlsx files in {root}"
 
     def test_parse_first_file(self):
         from spc_viz.parsers import parse_excel_multi
 
-        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        root = self._examples_dir()
         xlsx = sorted(
             [f for f in os.listdir(root) if f.endswith(".xlsx") and not f.startswith("~$")]
         )

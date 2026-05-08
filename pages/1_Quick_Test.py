@@ -17,8 +17,12 @@ _project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _project_root not in sys.path:
     sys.path.insert(0, _project_root)
 
+from spc_viz.config.paths import EXAMPLES_DIR
 from spc_viz.parsers import parse_excel_multi
 from spc_viz.theme import FONT_MONO, TEXT_MUTED, inject_theme
+
+# After R8, sample xlsx files live in examples/ rather than the repo root
+_data_dir = str(EXAMPLES_DIR)
 from spc_viz.ui import (
     build_and_render_chart,
     build_chart_controls,
@@ -108,7 +112,7 @@ def _discover_sheets(data_dir: str):
 st.sidebar.title("Quick Test")
 st.sidebar.caption("Auto-loads .xlsx from project directory")
 
-_available_sheets = _discover_sheets(_project_root)
+_available_sheets = _discover_sheets(_data_dir)
 _sheet_options = ["Auto-detect"] + _available_sheets
 
 sheet_choice = st.sidebar.selectbox(
@@ -120,7 +124,7 @@ sheet_choice = st.sidebar.selectbox(
 )
 sheet_name = "Raw data" if sheet_choice == "Auto-detect" else sheet_choice
 
-parsed_files = load_local_files(_project_root, sheet_name)
+parsed_files = load_local_files(_data_dir, sheet_name)
 
 if not parsed_files:
     st.title("Quick Test")

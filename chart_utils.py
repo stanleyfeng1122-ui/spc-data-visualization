@@ -13,7 +13,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from scipy import stats as scipy_stats
 
-from spc_parser import get_filtered_dim_meta
+from spc_viz.parsers import get_filtered_dim_meta
 
 # ---------------------------------------------------------------------------
 # Color palettes (no purple)

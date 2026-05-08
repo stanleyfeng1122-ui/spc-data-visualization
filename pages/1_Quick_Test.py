@@ -27,7 +27,7 @@ from shared_ui import (
     render_batch_export,
     render_summary_statistics,
 )
-from spc_parser import parse_excel_multi
+from spc_viz.parsers import parse_excel_multi
 from spc_viz.theme import FONT_MONO, TEXT_MUTED, inject_theme
 
 # ---------------------------------------------------------------------------

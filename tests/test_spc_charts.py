@@ -25,7 +25,7 @@ from chart_utils import (
     build_histogram,
     finalize_plotly_style,
 )
-from spc_parser import DimensionMeta
+from spc_viz.parsers import DimensionMeta
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -113,7 +113,7 @@ class TestImports:
         assert hasattr(chart_utils, "build_histogram")
 
     def test_spc_parser_imports(self):
-        import spc_parser
+        from spc_viz import parsers as spc_parser
 
         assert hasattr(spc_parser, "parse_excel_multi")
         assert hasattr(spc_parser, "DimensionMeta")
@@ -137,7 +137,7 @@ class TestDataLoading:
         assert len(xlsx) > 0, "No .xlsx files in project directory"
 
     def test_parse_first_file(self):
-        from spc_parser import parse_excel_multi
+        from spc_viz.parsers import parse_excel_multi
 
         root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         xlsx = sorted(

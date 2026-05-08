@@ -26,7 +26,7 @@ from chart_utils import (
     nelson_rules,
     prepare_combined_data,
 )
-from spc_parser import detect_dimension_groups, get_filtered_dim_meta
+from spc_viz.parsers import detect_dimension_groups, get_filtered_dim_meta
 from spc_viz.theme import (
     ACCENT,
     BORDER,

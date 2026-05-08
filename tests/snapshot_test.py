@@ -20,7 +20,7 @@ from pathlib import Path
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_PROJECT_ROOT))
 
-import spc_parser  # noqa: E402  # activates openpyxl monkey-patch
+from spc_viz import parsers as spc_parser  # noqa: E402  # activates openpyxl monkey-patch
 from chart_utils import (  # noqa: E402
     build_box_plot,
     build_combined_chart,

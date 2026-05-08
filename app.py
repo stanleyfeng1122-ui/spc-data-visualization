@@ -29,7 +29,7 @@ from shared_ui import (
     render_batch_export,
     render_summary_statistics,
 )
-from spc_parser import _open_workbook, parse_excel_multi
+from spc_viz.parsers import _open_workbook, parse_excel_multi
 from spc_viz.theme import inject_theme
 
 # ---------------------------------------------------------------------------

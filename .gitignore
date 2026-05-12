@@ -4,3 +4,6 @@ __pycache__/
 *.xlsx
 venv/
 .streamlit/
+
+.coverage
+htmlcov/

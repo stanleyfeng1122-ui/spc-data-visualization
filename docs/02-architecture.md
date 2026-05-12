@@ -1,81 +1,131 @@
-# SPC Data Visualization — Architecture (Current State)
+# SPC Data Visualization — Architecture (Phase 1)
 
-Snapshot of the codebase as it exists on branch `feature/code-quality-refactor`.
-Describes the seven Python modules shipped today, how they import each other,
-and the runtime path a user's `.xlsx` file takes on the way to a rendered chart.
+Current state after refactoring: code reorganized into layered `src/spc_viz/` package.
+User-facing behavior unchanged. Tests and examples remain functional.
+
+**Last Updated:** 2026-05-08
 
 ---
 
-## 1. Module Diagram
+## 1. Module Structure
 
 ```mermaid
 graph TB
-    subgraph Extern["External deps"]
-        ST[Streamlit]
-        PL[Plotly]
-        OX[openpyxl]
-        PD[pandas]
-        KA[kaleido]
+    subgraph Extern["External Dependencies"]
+        ST[Streamlit >= 1.30]
+        PL[Plotly >= 5.18]
+        OX[openpyxl >= 3.1]
+        PD[pandas >= 2.1]
+        NP[numpy >= 1.26]
+        SC[scipy >= 1.11]
+        KA[kaleido >= 1.2]
     end
 
-    subgraph Entry["Entry points (Streamlit pages)"]
-        APP[app.py<br/>main page]
-        QT[pages/1_Quick_Test.py<br/>auto-loads local xlsx]
-        SM[pages/2_Sheet_Manager.py<br/>coverage comparison]
+    subgraph Entry["Entry Points (Streamlit pages at repo root)"]
+        APP["app.py<br/>(main page)"]
+        QT["pages/1_Quick_Test.py<br/>(auto-load examples/)"]
+        SM["pages/2_Sheet_Manager.py<br/>(dim coverage diff)"]
     end
 
-    subgraph UI["UI layer (shared widgets + theme)"]
-        SU[shared_ui.py<br/>~827 lines]
-        TH[ui_theme.py<br/>~608 lines]
+    subgraph Parsers["parsers/ — Excel → Dataclasses"]
+        EXL["excel_reader.py<br/>(322 lines)<br/>parse_excel()<br/>parse_excel_multi()"]
+        MSR["measurements.py<br/>(319 lines)<br/>extract_measurements()"]
+        HDR["header_detect.py<br/>(146 lines)<br/>find dims + data"]
+        MTD["metadata.py<br/>(111 lines)<br/>factory detection"]
+        DIM["dimensions.py<br/>(242 lines)<br/>DimensionMeta"]
+        OXP["openpyxl_patch.py<br/>(91 lines)<br/>ExtRef monkey-patch"]
     end
 
-    subgraph Core["Data + chart layer"]
-        SP[spc_parser.py<br/>~944 lines]
-        CU[chart_utils.py<br/>~931 lines]
+    subgraph Charts["charts/ — Data → Plotly Figure"]
+        BAS["base.py<br/>(330 lines)<br/>data prep, sections<br/>SPC analytics"]
+        CPR["combined_profile.py<br/>(416 lines)<br/>main chart type"]
+        BXP["box_plot.py<br/>(227 lines)"]
+        HST["histogram.py<br/>(193 lines)"]
+        STY["styling.py<br/>(29 lines)<br/>finalize_plotly_style()"]
     end
 
-    APP --> SU
-    APP --> SP
-    APP --> TH
-    QT --> SU
-    QT --> SP
-    QT --> TH
-    SM --> SP
-    SM --> TH
+    subgraph UI["ui/ — Streamlit Widgets"]
+        SDB["sidebar.py<br/>(136 lines)<br/>chart controls"]
+        BEX["batch_export.py<br/>(135 lines)<br/>export panel"]
+        CHV["chart_view.py<br/>(100 lines)<br/>orchestrator"]
+        DPK["dimension_picker.py<br/>(93 lines)<br/>dim selector"]
+        STA["state.py<br/>(~130 lines)<br/>ChartControls"]
+    end
 
-    SU --> SP
-    SU --> CU
-    SU --> TH
-    CU --> SP
+    subgraph Theme["theme/ — Design Tokens"]
+        CSS["css.py<br/>(~580 lines)<br/>colors, fonts, inject_theme()"]
+    end
 
-    APP --> ST
-    QT --> ST
-    SM --> ST
-    SU --> ST
-    TH --> ST
-    CU --> PL
-    SU --> PL
-    SP --> OX
-    SP --> PD
-    SU --> PD
-    CU --> PD
-    CU --> KA
+    subgraph Config["config/ — Constants + Paths"]
+        CNS["constants.py<br/>(placeholder)"]
+        PTH["paths.py<br/>(REPO_ROOT, EXAMPLES_DIR)"]
+    end
+
+    subgraph Hidden["_deferred/ — v1.0 Hidden"]
+        ANL["analysis.py<br/>(519 lines)<br/>CPK, ANOVA, Nelson<br/>CUSUM, EWMA"]
+    end
+
+    APP --> STA
+    APP --> CHV
+    APP --> CSS
+    QT --> STA
+    QT --> CHV
+    QT --> CSS
+    SM --> OXP
+
+    CHV --> SDB
+    CHV --> BEX
+    CHV --> CPR
+    CHV --> BXP
+    CHV --> HST
+    SDB --> DPK
+    BEX --> EXL
+
+    CPR --> BAS
+    BXP --> BAS
+    HST --> BAS
+    BAS --> MSR
+    BAS --> DIM
+
+    EXL --> MSR
+    EXL --> HDR
+    EXL --> MTD
+    EXL --> DIM
+    MSR --> DIM
+    HDR --> DIM
+    MTD --> DIM
+    OXP --> OX
+
+    STA --> EXL
+    DIM --> PD
+
+    CPR --> PL
+    BXP --> PL
+    HST --> PL
+    STY --> PL
+    BAS --> PL
+    BAS --> NP
+    BAS --> SC
+
+    EXL --> OX
+    EXL --> PD
+    STA --> PD
+    CSS --> ST
+    SDB --> ST
+    BEX --> ST
+    CHV --> ST
+
+    BEX --> KA
 ```
 
-Notes:
-- `shared_ui.py` is the fan-in hub: both main pages and Quick Test route through
-  the same widget builders (`build_dimension_selector`, `build_chart_controls`,
-  `build_and_render_chart`, `render_summary_statistics`, `render_batch_export`).
-- `chart_utils.py` never imports Streamlit — it is pure Plotly figure construction
-  plus stats helpers (`calc_process_capability`, `nelson_rules`, `cusum_analysis`).
-  The UI layer wraps it.
-- `spc_parser.py` never imports Streamlit or Plotly — it is the only module that
-  touches `openpyxl`. Everything above it depends on its `DimensionMeta`
-  dataclass and the `ParsedWorkbook` dicts.
-- `ui_theme.py` is leaf-level: exports design tokens (colors, fonts) and the
-  `inject_theme()` function that writes CSS via `st.markdown(..., unsafe_allow_html=True)`.
-- Sheet Manager deliberately **does not** depend on `shared_ui` or `chart_utils`
-  — it is a standalone comparison tool, not a chart viewer.
+**Legend:**
+- **Parsers layer** — stateless Excel→dataclass pipeline. No Streamlit/Plotly deps.
+- **Charts layer** — pure Plotly Figure construction + SPC math (base.py). No Streamlit.
+- **UI layer** — Streamlit widgets + session state. Calls parsers + charts, renders with st.*.
+- **Theme** — CSS tokens. Injected by ui/sidebar.py.
+- **Config** — app-wide constants and path helpers.
+- **_deferred/** — Analysis features disabled in v1.0 (CPK, Nelson rules, CUSUM, EWMA, ANOVA).
+  Kept in source for Phase 2 re-enablement. Not imported by active code.
 
 ---
 
@@ -85,83 +135,149 @@ Notes:
 sequenceDiagram
     actor User
     participant Browser
-    participant Streamlit as Streamlit (app.py)
-    participant SharedUI as shared_ui.py
-    participant Parser as spc_parser.py
-    participant Charts as chart_utils.py
+    participant Streamlit as app.py
+    participant State as ui/state.py
+    participant Parser as parsers/excel_reader.py
+    participant Charts as charts/base.py & variants
+    participant UI as ui/chart_view.py
 
     User->>Browser: drag-drop .xlsx files
     Browser->>Streamlit: st.file_uploader bytes
-    Streamlit->>Parser: _open_workbook() sheet scan
-    Parser-->>Streamlit: sheet name list
-    Streamlit->>User: sidebar multiselect of sheets
 
-    User->>Streamlit: pick sheets to parse
-    Streamlit->>Parser: parse_excel_multi(file, sheet)
-    Note over Parser: detect header row<br/>extract metadata cols<br/>build DimensionMeta per dim<br/>extract measurement rows
-    Parser-->>Streamlit: ParsedWorkbook(df, dimensions{}, factory, ...)
+    Streamlit->>Parser: parse_excel_multi(file, sheets)
+    Note over Parser: openpyxl_patch<br/>find_data_start, detect headers<br/>extract metadata, measurements<br/>build DimensionMeta per dim
+    Parser-->>Streamlit: ParsedFile{df, dimensions{}, factory, ...}
 
-    Streamlit->>SharedUI: build_dimension_selector(all_dims, KP)
-    SharedUI-->>User: preset + multiselect widgets
-    User->>SharedUI: pick dim_nos + chart type + color_by
+    Streamlit->>State: prepare_and_clean(parsed_files, dim_nos)
+    Note over State: filter dims<br/>trim measurements<br/>clean outliers
+    State-->>Streamlit: (df_clean, DimensionMeta[])
 
-    Streamlit->>SharedUI: prepare_and_clean(parsed_files, dim_nos)
-    SharedUI->>Parser: get_filtered_dim_meta()
-    Parser-->>SharedUI: trimmed DimensionMeta
-    SharedUI-->>Streamlit: (df_clean, dim_metas)
+    User->>Browser: pick chart type + color_by
+    Browser->>Streamlit: sidebar multiselect
 
-    Streamlit->>SharedUI: build_and_render_chart(...)
-    SharedUI->>Charts: prepare_combined_data / build_combined_chart<br/>or build_box_plot / build_histogram
-    Charts-->>SharedUI: plotly.graph_objects.Figure
-    SharedUI->>Streamlit: st.plotly_chart(fig)
-    Streamlit-->>Browser: HTML + Plotly JSON
+    Streamlit->>UI: build_and_render_chart(...)
+    UI->>Charts: prepare_combined_data<br/>build_combined_chart / build_box_plot / build_histogram
+    Note over Charts: add spec limits<br/>calc SPC sections<br/>finalize Plotly style
+    Charts-->>UI: plotly.graph_objects.Figure
+    UI->>Streamlit: st.plotly_chart(fig, ...)
+    Streamlit-->>Browser: Plotly HTML + JSON
     Browser-->>User: interactive chart
-    Note over Browser: app.py also injects a<br/>click-to-highlight JS shim<br/>for Combined Profile mode
+
+    Note over Browser: app.py injects JS shim<br/>for Combined Profile mode<br/>click-to-highlight
 ```
 
 ---
 
-## 3. Why the Structure Looks This Way
+## 3. Layered Architecture
 
-The app has **three entry points** because they serve distinct user intents.
-`app.py` is the production SPC workflow: upload vendor files, pick sheets, chart
-dimensions. `pages/1_Quick_Test.py` is a developer aid — it auto-discovers every
-`.xlsx` in the project root and skips the upload widget, so iterating on chart
-or parser code costs zero clicks. `pages/2_Sheet_Manager.py` is a side tool for
-diffing dimension coverage between two files; it intentionally bypasses the
-chart stack because its job is set comparison, not visualization.
+### Parsers (`src/spc_viz/parsers/`)
 
-**Session-state isolation** is handled by a convention, not a framework feature:
-every `shared_ui` function takes a `key_prefix` argument, and each page passes
-its own namespace — `KP = "main_"` in `app.py`, `KP = "qt_"` in Quick Test. That
-prevents widget-key collisions when Streamlit reuses its single session-state
-dict across pages.
+**Contract:** Excel bytes → `DimensionMeta` dataclass + `pandas.DataFrame`
 
-The **critical seams** are two. First, the parser-to-UI boundary: `spc_parser`
-returns plain dataclasses and DataFrames — it has no awareness of Streamlit —
-which means the parser can be unit-tested without a browser. Second, the
-UI-to-charts boundary: `chart_utils` returns raw Plotly `Figure` objects, and
-only `shared_ui` is allowed to call `st.plotly_chart`. That keeps chart logic
-testable in a REPL and consolidates every `st.*` call in one module.
+- `openpyxl_patch.py` — Monkey-patch `ExternalReference` load to handle malformed XLNK refs.
+- `dimensions.py` — Data models: `DimensionMeta` (spec, unit, target), `ParsedFile` envelope.
+- `header_detect.py` — Scan first 50 rows for dimension number + data start row.
+- `metadata.py` — Extract metadata columns (part #, serial, date); auto-detect factory.
+- `measurements.py` — Extract measurement rows; deduplicate identical rows.
+- `excel_reader.py` — Orchestrator: `parse_excel()` single sheet, `parse_excel_multi()` all sheets.
 
-The app runs as a **permanent launchd service on `http://localhost:8504`** (see
-`logs/streamlit.log`). The plist keeps the Streamlit server alive across
-reboots so the user can bookmark the URL — exact plist path and on-login vs
-always-on policy is flagged as unconfirmed in US-018.
+**Key property:** No Streamlit or Plotly imports. Can be used in scripts or tests without UI.
+
+### Charts (`src/spc_viz/charts/`)
+
+**Contract:** Cleaned DataFrame + `DimensionMeta[]` → `plotly.graph_objects.Figure`
+
+- `base.py` — Shared data prep (sections by date, color palettes, SPC calcs: mean, sigma, control limits).
+- `combined_profile.py` — Main multi-dimension SPC chart (lines per dim, color by factory/serial).
+- `box_plot.py` — Box plot by factory or serial.
+- `histogram.py` — Histogram with mean/spec overlay.
+- `styling.py` — `finalize_plotly_style()` — margin, font, legend, hovertemplate tune.
+
+**Key property:** No Streamlit imports. Figures are plain Plotly; testable in REPL.
+
+### UI (`src/spc_viz/ui/`)
+
+**Contract:** Streamlit widgets + session state + orchestration
+
+- `state.py` — `ChartControls` dataclass; `prepare_and_clean()` filters/cleans data.
+- `sidebar.py` — Chart type + color_by + threshold selectors + color pickers.
+- `batch_export.py` — Batch export panel (Ctrl+click to select; export PNG/XLSX).
+- `dimension_picker.py` — Multi-select dimensions + point filter (date range, value bounds).
+- `chart_view.py` — `build_and_render_chart()` — calls parsers + charts + `st.plotly_chart()`.
+
+**Key property:** Only layer that imports Streamlit. Session-state keys use `key_prefix` per page.
+
+### Theme (`src/spc_viz/theme/`)
+
+- `css.py` — CSS class + design tokens (Slate palette, Inter/Courier Prime fonts, custom scrollbar).
+  Exported as `THEME_CSS` string; injected by sidebar via `st.markdown(..., unsafe_allow_html=True)`.
+
+### Config (`src/spc_viz/config/`)
+
+- `paths.py` — `REPO_ROOT`, `EXAMPLES_DIR` helpers (used by Quick Test to auto-discover `.xlsx`).
+- `constants.py` — Reserved for app-wide settings (v1.0: empty).
+
+### Hidden (`src/spc_viz/_deferred/`)
+
+- `analysis.py` — CPK, ANOVA, Nelson rules, CUSUM, EWMA. Disabled in v1.0 (no imports from active code).
+  Kept for Phase 2 re-enablement without file recreation.
 
 ---
 
-## 4. External Dependencies
+## 4. Entry Points
 
-| Library    | Role                                                    | Version (requirements.txt) |
-| ---------- | ------------------------------------------------------- | -------------------------- |
-| streamlit  | Web framework, session state, widgets, page routing     | unpinned                   |
-| openpyxl   | `.xlsx` parsing (only used inside `spc_parser.py`)      | unpinned                   |
-| pandas     | DataFrames for measurement data and group-by operations | unpinned                   |
-| plotly     | Interactive figure construction (charts + subplots)     | unpinned                   |
-| numpy      | Numeric helpers, used by chart and stats code           | unpinned                   |
-| scipy      | `scipy.stats` for capability / Nelson / CUSUM analysis  | unpinned                   |
-| kaleido    | Server-side PNG export for the Batch Export feature     | unpinned                   |
+All three remain at repo root (Streamlit requirement):
 
-All seven dependencies are listed without version pins in `requirements.txt`,
-so reproducibility relies on whatever pip resolves at install time.
+| File | Purpose | Dependencies |
+|------|---------|--------------|
+| `app.py` | Upload vendor files → pick sheets → chart dims | parsers, charts, ui, theme |
+| `pages/1_Quick_Test.py` | Auto-load `.xlsx` from `examples/` → fast iteration | parsers, charts, ui, theme |
+| `pages/2_Sheet_Manager.py` | Diff dimension coverage between two files (set logic only) | parsers only |
+
+**Session isolation:** Each page passes `key_prefix = "main_"`, `"qt_"`, `"sm_"` to UI functions.
+Prevents widget-key collisions across pages in shared Streamlit session state.
+
+---
+
+## 5. External Dependencies
+
+| Library    | Purpose | Version |
+|------------|---------|---------|
+| streamlit  | Web framework, widgets, session state, multi-page routing | ≥ 1.30 |
+| plotly     | Interactive chart construction (Figure, Scatter, Box, Histogram) | ≥ 5.18 |
+| openpyxl   | `.xlsx` parsing (isolated to `parsers/`) | ≥ 3.1 |
+| pandas     | DataFrames, groupby, aggregations | ≥ 2.1 |
+| numpy      | Numeric helpers (percentile, std, mean) | ≥ 1.26 |
+| scipy      | `scipy.stats` for capability / Nelson rule analysis | ≥ 1.11 |
+| kaleido    | Server-side PNG export (Batch Export feature) | ≥ 1.2 |
+
+**Dev tools** (in `pyproject.toml[project.optional-dependencies.dev]`):
+- pytest ≥ 8.0, pytest-cov ≥ 4.1
+- ruff ≥ 0.4 (linter/formatter)
+- mypy ≥ 1.10 (type checker)
+- pre-commit ≥ 3.7
+
+---
+
+## 6. Migration from Phase 0
+
+**What changed:** Code reorganized from flat root (7 modules) to layered `src/spc_viz/` package (18 modules, 4 subpackages).
+
+**Why:** Improve maintainability, enable future packaging/distribution, allow isolated testing of parsers and charts without Streamlit.
+
+**What stayed the same:** User-facing behavior (all chart types, export, UI flow). Test suite still passes (snapshot + unit tests remain unaffected). Examples/ directory moved but still auto-discovered.
+
+**Breaking changes:** None for end users. Developers must update imports (`from spc_parser import ...` → `from src.spc_viz.parsers.excel_reader import ...`).
+
+---
+
+**Test Coverage:**
+- `tests/test_spc_charts.py` — 24 unit tests (parsers, charts)
+- `tests/snapshot_test.py` — 4 visual regression scenarios
+- `tests/fixtures/` — Sample `.xlsx` files (symlinked to vendor data)
+- `tests/golden/` — Reference PNG images for visual baseline
+
+**Tooling:**
+- `.python-version` → 3.10
+- `pyproject.toml` → hatchling build, ruff/mypy/pytest config
+- `.pre-commit-config.yaml` → ruff format/lint, file checks

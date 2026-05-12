@@ -15,17 +15,17 @@ FONT_MONO = "'JetBrains Mono', 'IBM Plex Mono', 'SF Mono', monospace"
 FONT_HEADING = "'Barlow Condensed', 'Archivo Narrow', system-ui, sans-serif"
 
 WHITE = "#FFFFFF"
-BG_SUBTLE = "#FAFAFA"       # barely-there gray for sidebar / cards
-BORDER = "#D4D4D4"          # neutral-400
-BORDER_LIGHT = "#E5E5E5"    # neutral-300
-TEXT_PRIMARY = "#111111"     # near-black
-TEXT_SECONDARY = "#525252"   # neutral-600
-TEXT_MUTED = "#737373"       # neutral-500
-ACCENT = "#0D9488"           # teal-600 — distinctive, not default blue
-ACCENT_HOVER = "#0F766E"    # teal-700
-DANGER = "#DC2626"           # red-600
-SUCCESS = "#16A34A"          # green-600
-WARNING = "#D97706"          # amber-600
+BG_SUBTLE = "#FAFAFA"  # barely-there gray for sidebar / cards
+BORDER = "#D4D4D4"  # neutral-400
+BORDER_LIGHT = "#E5E5E5"  # neutral-300
+TEXT_PRIMARY = "#111111"  # near-black
+TEXT_SECONDARY = "#525252"  # neutral-600
+TEXT_MUTED = "#737373"  # neutral-500
+ACCENT = "#0D9488"  # teal-600 — distinctive, not default blue
+ACCENT_HOVER = "#0F766E"  # teal-700
+DANGER = "#DC2626"  # red-600
+SUCCESS = "#16A34A"  # green-600
+WARNING = "#D97706"  # amber-600
 
 CSS = f"""
 <style>
@@ -603,6 +603,6 @@ footer, footer * {{ background: {WHITE} !important; color: {TEXT_MUTED} !importa
 """
 
 
-def inject_theme():
+def inject_theme() -> None:
     """Inject the shared CSS theme into the current Streamlit page."""
     st.markdown(CSS, unsafe_allow_html=True)

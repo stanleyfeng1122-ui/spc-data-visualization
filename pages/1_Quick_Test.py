@@ -176,14 +176,14 @@ with hdr_left:
         f"<h1 style='margin:0;padding:0;font-size:1.3rem;'>{selected_group_label or 'SPC Analysis'}</h1>"
         f"<span style='font-size:0.75rem;color:{TEXT_MUTED};font-family:{FONT_MONO};'>"
         f"{len(parsed_files)} file{'s' if len(parsed_files) != 1 else ''} / "
-        f"{controls['chart_type']} / {controls['color_by']}"
+        f"{controls.chart_type} / {controls.color_by}"
         f"</span>",
         unsafe_allow_html=True,
     )
 
 df_clean, dim_metas, _ = prepare_and_clean(parsed_files, selected_dim_nos)
 
-custom_color_map = build_color_pickers(df_clean, controls["color_by"], key_prefix=KP)
+custom_color_map = build_color_pickers(df_clean, controls.color_by, key_prefix=KP)
 
 build_and_render_chart(
     df_clean,

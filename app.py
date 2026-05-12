@@ -230,7 +230,7 @@ st.title("SPC Data Visualization")
 
 df_clean, dim_metas, _ = prepare_and_clean(parsed_files, selected_dim_nos)
 
-custom_color_map = build_color_pickers(df_clean, controls["color_by"], key_prefix=KP)
+custom_color_map = build_color_pickers(df_clean, controls.color_by, key_prefix=KP)
 
 fig = build_and_render_chart(
     df_clean,
@@ -247,7 +247,7 @@ fig = build_and_render_chart(
 # ---------------------------------------------------------------------------
 # Click-to-highlight (JMP-style) for Combined Profile chart
 # ---------------------------------------------------------------------------
-if controls["chart_type"] == "Combined Profile":
+if controls.chart_type == "Combined Profile":
     _highlight_js = """
 <script>
 (function() {

@@ -105,8 +105,12 @@ def detect_factory(result: ParsedFile, filename: str) -> None:
             if m:
                 result.factory = m.group(1)
 
-    # Fallback: try to extract factory from filename (e.g. "FX_K116_...")
+    # Fallback: extract factory from leading 2-4 uppercase letters of filename.
+    # Handles BOTH "FX_K116_..." (underscore-separated) and "LK X3745 ..."
+    # (space-separated). Uses an explicit non-letter lookahead because \b
+    # treats underscore as a word character (so "FX_..." has no boundary
+    # between FX and _).
     if not result.factory:
-        name_parts = filename.split("_")
-        if name_parts and re.match(r"^[A-Z]{2,4}$", name_parts[0]):
-            result.factory = name_parts[0]
+        m = re.match(r"^([A-Z]{2,4})(?=[^A-Z]|$)", filename)
+        if m:
+            result.factory = m.group(1)

@@ -490,3 +490,333 @@ class TestColorGrouping:
             if t.type == "scattergl" and t.line:
                 colors.add(t.line.color)
         assert len(colors) == 1, f"Expected 1 color for None grouping, got {len(colors)}"
+
+
+# ---------------------------------------------------------------------------
+# 10. Factory detection (metadata.detect_factory) — regression for regex fix
+# ---------------------------------------------------------------------------
+
+from spc_viz.parsers.dimensions import ParsedFile
+from spc_viz.parsers.metadata import detect_factory
+
+
+def _pf(filename, data=None):
+    df = data if data is not None else pd.DataFrame({"A": [1, 2]})
+    pf = ParsedFile(filename=filename, sheet_name="Sheet1", data=df)
+    detect_factory(pf, filename)
+    return pf
+
+
+class TestFactoryDetection:
+    def test_underscore_separated(self):
+        assert _pf("FX_K116_P1.xlsx").factory == "FX"
+
+    def test_space_separated(self):
+        # The bug: filename.split("_") broke on space-separated names.
+        assert _pf("LK X3745 DH P1 PP&AP CORR CPK&100% Data.xlsx").factory == "LK"
+
+    def test_vendor_serial_number_column_wins(self):
+        df = pd.DataFrame({"Vendor Serial Number": ["ABC", "ABC", "XYZ"]})
+        assert _pf("FX_K116.xlsx", df).factory == "ABC"
+
+    def test_sn_column_prefix_used(self):
+        df = pd.DataFrame({"SN": ["FJS123", "FJS456"]})
+        assert _pf("LK_K116.xlsx", df).factory == "FJS"
+
+    def test_weird_lowercase_filename_no_match(self):
+        assert _pf("data_export.xlsx").factory is None
+
+    def test_two_letter_factory(self):
+        assert _pf("TY_K116.xlsx").factory == "TY"
+
+    def test_three_letter_factory(self):
+        assert _pf("TRM_X3083.xlsx").factory == "TRM"
+
+    def test_four_letter_factory(self):
+        assert _pf("FXJS_X3744.xlsx").factory == "FXJS"
+
+
+# ---------------------------------------------------------------------------
+# 11. compute_sections
+# ---------------------------------------------------------------------------
+
+from spc_viz.charts.base import (
+    COLOR_PALETTE,
+    compute_row_groups,
+    compute_sections,
+    get_color_for_group,
+)
+
+
+class TestComputeSections:
+    def _df(self):
+        return pd.DataFrame({"x": [1, 2, 3]})
+
+    def test_empty_fields_all(self):
+        s = compute_sections(self._df(), [])
+        assert list(s) == ["All", "All", "All"]
+
+    def test_factory_field_with_column(self):
+        df = self._df()
+        df["_factory"] = ["FX", "FX", "LK"]
+        s = compute_sections(df, ["Factory"])
+        assert set(s) == {"FX", "LK"}
+
+    def test_factory_field_no_column(self):
+        s = compute_sections(self._df(), ["Factory"])
+        assert list(s) == ["?", "?", "?"]
+
+    def test_source_file_field(self):
+        df = self._df()
+        df["_source_file"] = ["a.xlsx", "a.xlsx", "b.xlsx"]
+        s = compute_sections(df, ["Source File"])
+        assert set(s) == {"a.xlsx", "b.xlsx"}
+
+    def test_multiple_fields_concat(self):
+        df = self._df()
+        df["_factory"] = ["FX", "FX", "LK"]
+        df["Build"] = ["P1", "P2", "P1"]
+        s = compute_sections(df, ["Factory", "Build"])
+        assert list(s) == ["FX P1", "FX P2", "LK P1"]
+
+    def test_missing_field_all_q(self):
+        s = compute_sections(self._df(), ["DoesNotExist"])
+        assert list(s) == ["?", "?", "?"]
+
+
+# ---------------------------------------------------------------------------
+# 12. compute_row_groups
+# ---------------------------------------------------------------------------
+
+
+class TestComputeRowGroups:
+    def _df(self):
+        return pd.DataFrame({"Color": ["Red", "Blue", "Red"]})
+
+    def test_none_all(self):
+        s = compute_row_groups(self._df(), "None")
+        assert list(s) == ["All", "All", "All"]
+
+    def test_existing_column(self):
+        s = compute_row_groups(self._df(), "Color")
+        assert set(s) == {"Red", "Blue"}
+
+    def test_missing_column_all(self):
+        s = compute_row_groups(self._df(), "Nope")
+        assert list(s) == ["All", "All", "All"]
+
+
+# ---------------------------------------------------------------------------
+# 13. get_color_for_group
+# ---------------------------------------------------------------------------
+
+
+class TestGetColorForGroup:
+    def test_distinct_colors(self):
+        c0, c1, c2 = get_color_for_group(0), get_color_for_group(1), get_color_for_group(2)
+        assert len({c0, c1, c2}) == 3
+
+    def test_wraps_around(self):
+        n = len(COLOR_PALETTE)
+        assert get_color_for_group(n) == get_color_for_group(0)
+        assert get_color_for_group(n + 3) == get_color_for_group(3)
+
+    def test_returns_hex_string(self):
+        c = get_color_for_group(0)
+        assert isinstance(c, str)
+        assert c.startswith("#") and len(c) == 7
+
+
+# ---------------------------------------------------------------------------
+# 14. ChartControls dataclass
+# ---------------------------------------------------------------------------
+
+import dataclasses
+
+
+def _controls(**overrides):
+    base = dict(
+        chart_type="Combined Profile",
+        color_by="None",
+        section_by_fields=["Factory"],
+        row_by="None",
+        y_axis_mode="Measurement values",
+        custom_yrange=None,
+        hist_nbins=30,
+    )
+    base.update(overrides)
+    from spc_viz.ui import ChartControls
+    return ChartControls(**base)
+
+
+class TestChartControls:
+    def test_fields_accessible(self):
+        c = _controls()
+        assert c.chart_type == "Combined Profile"
+        assert c.color_by == "None"
+        assert c.section_by_fields == ["Factory"]
+        assert c.row_by == "None"
+        assert c.y_axis_mode == "Measurement values"
+        assert c.custom_yrange is None
+        assert c.hist_nbins == 30
+
+    def test_frozen_mutation_raises(self):
+        c = _controls()
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            c.chart_type = "Box Plot"  # type: ignore[misc]
+
+    def test_replace_creates_copy(self):
+        c = _controls()
+        c2 = dataclasses.replace(c, chart_type="Histogram", hist_nbins=50)
+        assert c.chart_type == "Combined Profile"
+        assert c2.chart_type == "Histogram"
+        assert c2.hist_nbins == 50
+
+    def test_equality(self):
+        assert _controls() == _controls()
+
+    def test_chart_type_literal_values(self):
+        for ct in ("Combined Profile", "Box Plot", "Histogram"):
+            assert _controls(chart_type=ct).chart_type == ct
+
+
+# ---------------------------------------------------------------------------
+# 15. Parser edge cases (real fixtures)
+# ---------------------------------------------------------------------------
+
+FIXTURES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures")
+FX_FIXTURE = os.path.join(FIXTURES_DIR, "FX_X3745.xlsx")
+LK_FIXTURE = os.path.join(FIXTURES_DIR, "LK_X3745.xlsx")
+
+
+class TestParserEdgeCases:
+    def test_nonexistent_file_raises(self):
+        from spc_viz.parsers import parse_excel_multi
+
+        with pytest.raises(FileNotFoundError):
+            parse_excel_multi(os.path.join(FIXTURES_DIR, "no_such_file.xlsx"))
+
+    def test_nonexistent_sheet_autodetects(self):
+        from spc_viz.parsers import parse_excel_multi
+
+        # A sheet name that doesn't exist falls through to auto-detect mode,
+        # which scans all data sheets and returns >= 1 ParsedFile.
+        results = parse_excel_multi(FX_FIXTURE, sheet_name="ZZZ_NoSuchSheet")
+        assert isinstance(results, list)
+        assert len(results) >= 1
+        assert all(r.dimensions for r in results)
+
+    def test_dimension_meta_fields(self):
+        from spc_viz.parsers import parse_excel_multi
+
+        results = parse_excel_multi(FX_FIXTURE, sheet_name="Raw Data-PP")
+        dmeta = next(iter(results[0].dimensions.values()))
+        assert dmeta.dim_no
+        assert isinstance(dmeta.description, str)
+        assert isinstance(dmeta.col_labels, list) and len(dmeta.col_labels) > 0
+        assert isinstance(dmeta.point_numbers, list)
+        assert isinstance(dmeta.nominal, list)
+        assert isinstance(dmeta.usl, list)
+        assert isinstance(dmeta.lsl, list)
+
+    def test_parse_raw_data_pp_sheet(self):
+        from spc_viz.parsers import parse_excel_multi
+
+        results = parse_excel_multi(FX_FIXTURE, sheet_name="Raw Data-PP")
+        assert len(results) >= 1
+        assert results[0].sheet_name == "Raw Data-PP"
+        assert len(results[0].dimensions) > 0
+
+    def test_meta_columns_non_empty(self):
+        from spc_viz.parsers import parse_excel_multi
+
+        results = parse_excel_multi(FX_FIXTURE, sheet_name="Raw Data-PP")
+        assert isinstance(results[0].meta_columns, list)
+        assert len(results[0].meta_columns) > 0
+
+    def test_factory_detected_for_both_fixtures(self):
+        from spc_viz.parsers import parse_excel_multi
+
+        fx = parse_excel_multi(FX_FIXTURE, sheet_name="Raw Data-PP")
+        lk = parse_excel_multi(LK_FIXTURE, sheet_name="Raw Data-PP")
+        assert fx[0].factory == "FX"
+        assert lk[0].factory == "LK"
+
+
+# ---------------------------------------------------------------------------
+# 16. Single-point dimension handling in build_combined_chart
+# ---------------------------------------------------------------------------
+
+
+class TestSinglePointDimension:
+    def test_returns_figure(self, single_point_data, common_kwargs):
+        df, dim_metas = single_point_data
+        fig = build_combined_chart(
+            df=df,
+            dim_metas=dim_metas,
+            dim_nos=["SPC_C1"],
+            section_by_fields=["Factory"],
+            y_axis_mode="Measurement values",
+            custom_yrange=None,
+            **common_kwargs,
+        )
+        assert fig is not None
+
+    def test_uses_markers_not_lines(self, single_point_data, common_kwargs):
+        df, dim_metas = single_point_data
+        fig = build_combined_chart(
+            df=df,
+            dim_metas=dim_metas,
+            dim_nos=["SPC_C1"],
+            section_by_fields=["Factory"],
+            y_axis_mode="Measurement values",
+            custom_yrange=None,
+            **common_kwargs,
+        )
+        traces = [t for t in fig.data if t.type == "scattergl"]
+        assert len(traces) > 0
+        assert all("markers" in (t.mode or "") for t in traces)
+        assert all("lines" not in (t.mode or "") for t in traces)
+
+    def test_marker_size_set(self, single_point_data, common_kwargs):
+        df, dim_metas = single_point_data
+        fig = build_combined_chart(
+            df=df,
+            dim_metas=dim_metas,
+            dim_nos=["SPC_C1"],
+            section_by_fields=["Factory"],
+            y_axis_mode="Measurement values",
+            custom_yrange=None,
+            **common_kwargs,
+        )
+        t = [t for t in fig.data if t.type == "scattergl"][0]
+        assert t.marker is not None and t.marker.size is not None and t.marker.size > 0
+
+    def test_single_x_point(self, single_point_data, common_kwargs):
+        df, dim_metas = single_point_data
+        fig = build_combined_chart(
+            df=df,
+            dim_metas=dim_metas,
+            dim_nos=["SPC_C1"],
+            section_by_fields=["Factory"],
+            y_axis_mode="Measurement values",
+            custom_yrange=None,
+            **common_kwargs,
+        )
+        t = [t for t in fig.data if t.type == "scattergl"][0]
+        assert len(t.x) == 1
+
+    def test_no_crash_synthetic_single_point(self, common_kwargs):
+        cols, meta = _make_dim_meta("SPC_X1", "Flatness", 1, nominal=0.0, usl=0.5, lsl=0.0)
+        df = pd.DataFrame({cols[0]: np.random.uniform(0.0, 0.4, 12)})
+        df["Factory"] = ["A"] * 6 + ["B"] * 6
+        fig = build_combined_chart(
+            df=df,
+            dim_metas=OrderedDict([("SPC_X1", meta)]),
+            dim_nos=["SPC_X1"],
+            section_by_fields=["Factory"],
+            y_axis_mode="Measurement values",
+            custom_yrange=None,
+            **common_kwargs,
+        )
+        assert fig is not None and len(fig.data) > 0

@@ -69,16 +69,18 @@ def _render_scenario(scenario: Scenario) -> bytes:
     if not parsed_files:
         raise RuntimeError(f"No data parsed for {scenario.name}")
 
-    df, dim_metas = prepare_combined_data(parsed_files, [scenario.dim_no])
+    dim_nos = [scenario.dim_no, *scenario.extra_dims]
+    df, dim_metas = prepare_combined_data(parsed_files, dim_nos)
     if df is None or df.empty:
         raise RuntimeError(f"Empty dataframe for {scenario.name}")
-    if scenario.dim_no not in dim_metas:
-        raise RuntimeError(f"Dim {scenario.dim_no} not found in {scenario.files}")
+    for dn in dim_nos:
+        if dn not in dim_metas:
+            raise RuntimeError(f"Dim {dn} not found in {scenario.files}")
 
     common = dict(
         df=df,
         dim_metas=dim_metas,
-        dim_nos=[scenario.dim_no],
+        dim_nos=dim_nos,
         color_by=scenario.color_by or "None",
         exclude_intervals=scenario.exclude_intervals,
         group_label=scenario.color_by or "All",

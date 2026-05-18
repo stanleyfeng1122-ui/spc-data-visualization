@@ -48,11 +48,29 @@ def build_dimension_selector(
     else:
         default_labels = [dim_display_labels[0]] if dim_display_labels else []
 
+    dims_key = f"{key_prefix}dims"
+    preset_state_key = f"{key_prefix}preset_applied"
+    current_selected_labels = st.session_state.get(dims_key, default_labels)
+    if not isinstance(current_selected_labels, list):
+        current_selected_labels = default_labels
+    current_selected_labels = [label for label in current_selected_labels if label in dim_display_map]
+
+    if selected_preset != "Custom":
+        preset_signature = (selected_preset, tuple(default_labels))
+        if st.session_state.get(preset_state_key) != preset_signature:
+            current_selected_labels = default_labels
+            st.session_state[preset_state_key] = preset_signature
+    elif not current_selected_labels:
+        current_selected_labels = default_labels
+
+    st.session_state[dims_key] = current_selected_labels
+
     selected_dim_labels: list[str] = st.sidebar.multiselect(
         "Dimensions",
         options=dim_display_labels,
-        default=default_labels,
-        key=f"{key_prefix}dims",
+        key=dims_key,
+        placeholder="Type SPC ID or description",
+        help="Click here and type to search inside the dropdown, then select matching dimensions.",
     )
     selected_dim_nos = [dim_display_map[lbl] for lbl in selected_dim_labels]
     selected_group_label = (

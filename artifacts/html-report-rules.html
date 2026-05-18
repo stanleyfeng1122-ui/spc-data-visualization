@@ -1,0 +1,565 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>HTML Report Rules for Complex AI Output</title>
+  <style>
+    :root {
+      --bg: #f7f8fb;
+      --paper: #ffffff;
+      --ink: #17202a;
+      --muted: #64748b;
+      --line: #d9e0ea;
+      --blue: #2563eb;
+      --blue-soft: #e8f0ff;
+      --green: #15803d;
+      --green-soft: #e8f7ee;
+      --amber: #b45309;
+      --amber-soft: #fff4df;
+      --red: #b91c1c;
+      --red-soft: #feecec;
+      --slate: #334155;
+      --shadow: 0 16px 48px rgba(15, 23, 42, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    a {
+      color: var(--blue);
+      text-decoration: none;
+    }
+
+    a:hover {
+      text-decoration: underline;
+    }
+
+    .shell {
+      display: grid;
+      grid-template-columns: 270px minmax(0, 1fr);
+      min-height: 100vh;
+    }
+
+    aside {
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      padding: 28px 22px;
+      background: #101828;
+      color: #f8fafc;
+      overflow: auto;
+    }
+
+    .nav-title {
+      font-weight: 750;
+      font-size: 18px;
+      line-height: 1.25;
+      margin-bottom: 8px;
+    }
+
+    .nav-subtitle {
+      color: #cbd5e1;
+      font-size: 13px;
+      margin-bottom: 26px;
+    }
+
+    nav a {
+      display: block;
+      color: #e2e8f0;
+      padding: 8px 10px;
+      border-radius: 8px;
+      margin: 3px 0;
+      font-size: 14px;
+    }
+
+    nav a:hover {
+      background: rgba(255, 255, 255, 0.08);
+      text-decoration: none;
+    }
+
+    main {
+      padding: 34px;
+    }
+
+    .hero {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 30px;
+      box-shadow: var(--shadow);
+      max-width: 1180px;
+    }
+
+    .eyebrow {
+      color: var(--blue);
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      font-size: 12px;
+      margin-bottom: 10px;
+    }
+
+    h1 {
+      font-size: clamp(32px, 5vw, 54px);
+      line-height: 1.02;
+      margin: 0 0 14px;
+      letter-spacing: 0;
+    }
+
+    .lead {
+      color: var(--slate);
+      font-size: 18px;
+      max-width: 850px;
+      margin: 0 0 24px;
+    }
+
+    .status-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 24px;
+    }
+
+    .status {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 12px;
+      background: #fbfdff;
+    }
+
+    .status b {
+      display: block;
+      font-size: 12px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      margin-bottom: 4px;
+    }
+
+    section {
+      max-width: 1180px;
+      margin: 22px 0;
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 26px;
+    }
+
+    h2 {
+      margin: 0 0 14px;
+      font-size: 25px;
+      letter-spacing: 0;
+    }
+
+    h3 {
+      margin: 22px 0 8px;
+      font-size: 17px;
+    }
+
+    p {
+      margin: 0 0 12px;
+    }
+
+    ul, ol {
+      margin-top: 8px;
+      padding-left: 22px;
+    }
+
+    li {
+      margin: 6px 0;
+    }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .card {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 16px;
+      background: #fbfdff;
+    }
+
+    .card strong {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 16px;
+    }
+
+    .callout {
+      border-left: 5px solid var(--blue);
+      background: var(--blue-soft);
+      padding: 14px 16px;
+      border-radius: 10px;
+      margin: 16px 0;
+    }
+
+    .callout.good {
+      border-left-color: var(--green);
+      background: var(--green-soft);
+    }
+
+    .callout.warn {
+      border-left-color: var(--amber);
+      background: var(--amber-soft);
+    }
+
+    .callout.bad {
+      border-left-color: var(--red);
+      background: var(--red-soft);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      overflow: hidden;
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      margin: 14px 0;
+      background: #fff;
+    }
+
+    th, td {
+      padding: 12px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      background: #f1f5f9;
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      color: #475569;
+    }
+
+    tr:last-child td {
+      border-bottom: 0;
+    }
+
+    code, pre {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+
+    pre {
+      background: #0f172a;
+      color: #e2e8f0;
+      border-radius: 10px;
+      padding: 16px;
+      overflow: auto;
+      font-size: 13px;
+    }
+
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 10px;
+      margin: 16px 0;
+    }
+
+    .step {
+      background: #f8fafc;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 13px;
+      min-height: 95px;
+    }
+
+    .step span {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      background: var(--blue);
+      color: white;
+      font-weight: 700;
+      margin-bottom: 8px;
+      font-size: 13px;
+    }
+
+    .badge {
+      display: inline-block;
+      border-radius: 999px;
+      padding: 3px 9px;
+      font-size: 12px;
+      font-weight: 700;
+      margin-right: 6px;
+    }
+
+    .badge.blue { background: var(--blue-soft); color: var(--blue); }
+    .badge.green { background: var(--green-soft); color: var(--green); }
+    .badge.amber { background: var(--amber-soft); color: var(--amber); }
+    .badge.red { background: var(--red-soft); color: var(--red); }
+
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+    }
+
+    .copy-box {
+      border: 1px solid var(--line);
+      background: #f8fafc;
+      border-radius: 10px;
+      padding: 14px;
+      white-space: pre-wrap;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 13px;
+    }
+
+    footer {
+      max-width: 1180px;
+      color: var(--muted);
+      padding: 10px 0 40px;
+      font-size: 13px;
+    }
+
+    @media (max-width: 900px) {
+      .shell {
+        grid-template-columns: 1fr;
+      }
+
+      aside {
+        position: relative;
+        height: auto;
+      }
+
+      main {
+        padding: 18px;
+      }
+
+      .status-grid,
+      .cards,
+      .two-col,
+      .flow {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media print {
+      aside {
+        display: none;
+      }
+
+      .shell {
+        display: block;
+      }
+
+      body {
+        background: white;
+      }
+
+      main {
+        padding: 0;
+      }
+
+      section, .hero {
+        box-shadow: none;
+        break-inside: avoid;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <aside>
+      <div class="nav-title">HTML Report Rules</div>
+      <div class="nav-subtitle">A practical standard for complex AI output.</div>
+      <nav>
+        <a href="#summary">Summary</a>
+        <a href="#decision">Core Decision</a>
+        <a href="#triggers">When to Use HTML</a>
+        <a href="#structure">Required Structure</a>
+        <a href="#types">Report Types</a>
+        <a href="#design">Design Rules</a>
+        <a href="#workflow">Workflow</a>
+        <a href="#template">Reusable Prompt</a>
+      </nav>
+    </aside>
+
+    <main>
+      <header class="hero" id="summary">
+        <div class="eyebrow">AI Output Standard</div>
+        <h1>Use HTML when the report is too dense for Markdown.</h1>
+        <p class="lead">Based on the Karpathy note in the vault: durable knowledge stays in Markdown, but complex explanations, plans, reviews, and visual evidence should be delivered as local HTML artifacts.</p>
+
+        <div class="status-grid">
+          <div class="status"><b>Scope</b>Long reports, reviews, plans, tests</div>
+          <div class="status"><b>Default</b>Markdown for short, HTML for dense</div>
+          <div class="status"><b>Memory</b>Markdown companion file</div>
+          <div class="status"><b>Output</b>Local browser-readable artifact</div>
+        </div>
+      </header>
+
+      <section id="decision">
+        <h2>Core Decision</h2>
+        <div class="callout good">
+          <strong>Rule:</strong> HTML is the presentation layer. Markdown is the memory layer.
+        </div>
+        <p>For simple answers, chat Markdown is enough. For complicated reports, HTML gives better scanning, layout, tables, diagrams, color-coded evidence, and navigation. The point is not decoration. The point is lowering review effort.</p>
+
+        <div class="two-col">
+          <div class="card">
+            <strong>Keep in Markdown</strong>
+            <ul>
+              <li>Permanent vault notes</li>
+              <li>Short answers</li>
+              <li>Small decisions</li>
+              <li>Diff-sensitive project docs</li>
+            </ul>
+          </div>
+          <div class="card">
+            <strong>Render as HTML</strong>
+            <ul>
+              <li>Long codebase reports</li>
+              <li>Agent-team summaries</li>
+              <li>Visual QA reports</li>
+              <li>Feature planning dashboards</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <section id="triggers">
+        <h2>When to Use HTML</h2>
+        <p>Use HTML when two or more of these are true:</p>
+        <table>
+          <thead>
+            <tr>
+              <th>Trigger</th>
+              <th>Why HTML Helps</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>More than 6 sections</td><td>Navigation and visual hierarchy prevent scrolling fatigue.</td></tr>
+            <tr><td>3+ options compared</td><td>Tables and cards make tradeoffs visible.</td></tr>
+            <tr><td>5+ files referenced</td><td>File maps and grouped evidence reduce confusion.</td></tr>
+            <tr><td>Screenshots or charts included</td><td>HTML can place visual evidence next to interpretation.</td></tr>
+            <tr><td>User must approve a decision</td><td>Decision blocks make the required action explicit.</td></tr>
+            <tr><td>Report will be reused</td><td>A local artifact is easier to reopen than a long chat answer.</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="structure">
+        <h2>Required Structure</h2>
+        <div class="flow">
+          <div class="step"><span>1</span><strong>Summary</strong><br>5-8 bullets on what matters.</div>
+          <div class="step"><span>2</span><strong>Status</strong><br>Scope, confidence, date, decision needed.</div>
+          <div class="step"><span>3</span><strong>Evidence</strong><br>Files, screenshots, tests, observations.</div>
+          <div class="step"><span>4</span><strong>Decision</strong><br>What the user needs to approve.</div>
+          <div class="step"><span>5</span><strong>Action</strong><br>Prioritized next steps.</div>
+        </div>
+
+        <div class="callout warn">
+          First screen test: within 30 seconds, the user should know what changed, why it matters, what to review, and what action is next.
+        </div>
+      </section>
+
+      <section id="types">
+        <h2>Report Types</h2>
+        <div class="cards">
+          <div class="card">
+            <strong>Architecture Report</strong>
+            Module map, data flow, deepening opportunities, testability impact, risks.
+          </div>
+          <div class="card">
+            <strong>Bug Report</strong>
+            Reproduction, expected vs actual, evidence, root cause, fix plan, regression tests.
+          </div>
+          <div class="card">
+            <strong>Visual QA Report</strong>
+            Test status, screenshot paths, chart checks, pass/fail conclusion.
+          </div>
+          <div class="card">
+            <strong>Feature Plan</strong>
+            User problem, proposed workflow, scope, slices, open decisions.
+          </div>
+          <div class="card">
+            <strong>Agent-Team Report</strong>
+            Agent roster, assignments, outputs, conflicts, lead-agent review.
+          </div>
+          <div class="card">
+            <strong>Decision Report</strong>
+            Options, tradeoffs, recommended choice, consequences, rollback path.
+          </div>
+        </div>
+      </section>
+
+      <section id="design">
+        <h2>Design Rules</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Rule</th>
+              <th>Standard</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>Lead with findings</td><td>Do not make the user read the process before the conclusion.</td></tr>
+            <tr><td>Color has meaning</td><td><span class="badge red">Blocker</span><span class="badge amber">Risk</span><span class="badge green">Verified</span><span class="badge blue">Info</span></td></tr>
+            <tr><td>Tables for comparison</td><td>Use tables for options, priorities, files, and pass/fail matrices.</td></tr>
+            <tr><td>Cards for repeated items</td><td>Use cards for repeated report objects, not as generic decoration.</td></tr>
+            <tr><td>Evidence close to claims</td><td>Put screenshots, file paths, or tests near the statement they support.</td></tr>
+            <tr><td>Copy/export block</td><td>For reusable decisions, include copyable Markdown or JSON.</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="workflow">
+        <h2>Workflow</h2>
+        <ol>
+          <li>Decide whether the output is short Markdown or complex HTML.</li>
+          <li>If complex, create a Markdown companion file for durable decisions.</li>
+          <li>Create the HTML artifact under <code>artifacts/</code>.</li>
+          <li>Keep the first screen focused on summary, status, and review action.</li>
+          <li>Use evidence sections for files, screenshots, tests, and observations.</li>
+          <li>End with a short action plan.</li>
+        </ol>
+
+        <div class="callout">
+          Recommended pairing: <code>docs/communication/&lt;topic&gt;.md</code> for durable rules and <code>artifacts/&lt;topic&gt;.html</code> for visual review.
+        </div>
+      </section>
+
+      <section id="template">
+        <h2>Reusable Prompt</h2>
+        <p>Use this when you want future agents to produce this kind of output.</p>
+        <div class="copy-box">Create an HTML artifact for this report because the output is complex.
+
+Use:
+- executive summary at the top
+- sticky navigation
+- visual hierarchy with cards, tables, callouts, and diagrams
+- evidence section with file paths, screenshots, or test results
+- decision section showing what I need to review
+- action plan sorted by priority
+
+Also create or update a Markdown companion file if the result should become durable project knowledge. Keep Markdown as memory and HTML as the reading layer.</div>
+      </section>
+
+      <footer>
+        Generated from the vault note: AI Notes/concept/2026-05-11-html-vision-preferred-ai-output-karpathy.md.
+      </footer>
+    </main>
+  </div>
+</body>
+</html>

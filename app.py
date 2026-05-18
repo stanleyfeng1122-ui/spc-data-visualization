@@ -30,6 +30,12 @@ from spc_viz.ui import (
     prepare_and_clean,
     render_batch_export,
 )
+from spc_viz.ui.file_sources import (
+    discover_local_xlsx_files,
+    read_last_data_folder,
+    remember_last_data_folder,
+)
+from spc_viz.ui.sheet_selection import choose_default_sheets
 
 # ---------------------------------------------------------------------------
 # Page config
@@ -46,16 +52,37 @@ inject_theme()
 # ---------------------------------------------------------------------------
 st.sidebar.title("SPC Data Visualization")
 
-uploaded_files = st.sidebar.file_uploader(
-    "Upload CPK Excel files (.xlsx)",
-    type=["xlsx"],
-    accept_multiple_files=True,
-    help="Drag and drop one or more vendor CPK Excel files here.",
+file_source = st.sidebar.radio(
+    "File source",
+    options=["Upload files", "Local folder"],
+    horizontal=True,
+    key="main_file_source",
 )
+
+if file_source == "Local folder":
+    local_folder = st.sidebar.text_input(
+        "Local data folder",
+        value=read_last_data_folder(),
+        key="main_local_data_folder",
+        help="Loads all .xlsx files in this folder. Useful after refresh or code updates.",
+    )
+    remember_last_data_folder(local_folder)
+    uploaded_files = discover_local_xlsx_files(local_folder)
+    if uploaded_files:
+        st.sidebar.caption(f"Loaded {len(uploaded_files)} local workbook(s)")
+    else:
+        st.sidebar.warning("No .xlsx files found in this folder.")
+else:
+    uploaded_files = st.sidebar.file_uploader(
+        "Upload CPK Excel files (.xlsx)",
+        type=["xlsx"],
+        accept_multiple_files=True,
+        help="Drag and drop one or more vendor CPK Excel files here.",
+    )
 
 if not uploaded_files:
     st.title("SPC Data Visualization Tool")
-    st.info("Upload one or more .xlsx CPK data files using the sidebar to get started.")
+    st.info("Upload .xlsx files or switch to Local folder mode in the sidebar.")
     st.stop()
 
 # ---------------------------------------------------------------------------
@@ -95,10 +122,20 @@ for _uf in uploaded_files:
             _display_to_actual[_existing][_uf.name] = _sn
     _wb.close()
 
+_sheet_upload_signature = tuple((uf.name, getattr(uf, "size", None)) for uf in uploaded_files)
+_default_enabled_sheets = choose_default_sheets(_display_sheets)
+if st.session_state.get("main_sheet_upload_signature") != _sheet_upload_signature:
+    st.session_state["main_sheet_upload_signature"] = _sheet_upload_signature
+    st.session_state["main_enabled_sheets"] = _default_enabled_sheets
+else:
+    _current_enabled_sheets = st.session_state.get("main_enabled_sheets", _default_enabled_sheets)
+    _valid_enabled_sheets = [s for s in _current_enabled_sheets if s in _display_sheets]
+    st.session_state["main_enabled_sheets"] = _valid_enabled_sheets or _default_enabled_sheets
+
 enabled_sheets = st.sidebar.multiselect(
     "Sheets to parse",
     options=_display_sheets,
-    default=_display_sheets,
+    key="main_enabled_sheets",
     help="Enable sheets to include. Dimensions with the same name merge across files.",
 )
 

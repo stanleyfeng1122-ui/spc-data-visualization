@@ -298,6 +298,19 @@ class TestSpecLimits:
         rects = [s for s in shapes if s.type == "rect"]
         assert len(rects) > 0, "No tolerance band (hrect) found"
 
+    def test_spec_labels_are_inside_plot_area_not_axis_tick_area(
+        self, multi_point_data, common_kwargs
+    ):
+        fig = self._build_fig(multi_point_data, common_kwargs)
+        spec_annotations = [
+            ann for ann in fig.layout.annotations or [] if ann.text and "SL-" in ann.text
+        ]
+
+        assert spec_annotations
+        assert all(ann.xref == "paper" for ann in spec_annotations)
+        assert all(ann.x > 0 for ann in spec_annotations)
+        assert all(ann.xanchor == "left" for ann in spec_annotations)
+
 
 # ---------------------------------------------------------------------------
 # 6. Box Plot

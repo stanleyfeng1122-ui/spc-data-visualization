@@ -456,13 +456,13 @@ def build_combined_chart(
     for val, label in zip(spec_tickvals, spec_ticktext):
         annotations.append(
             dict(
-                x=0.0,
+                x=0.006,
                 y=val,
                 xref="paper",
                 yref="y",
                 text=f"<b>{label}</b>",
                 showarrow=False,
-                xanchor="right",
+                xanchor="left",
                 font=dict(size=10, color="rgba(220,38,38,0.9)", family="Arial Black"),
                 bgcolor="rgba(255,255,255,0.7)",
             )

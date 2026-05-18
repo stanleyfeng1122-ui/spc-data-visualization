@@ -1,0 +1,574 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SPC App Improvement Workflow</title>
+  <style>
+    :root {
+      --bg: #f6f7fb;
+      --paper: #ffffff;
+      --ink: #111827;
+      --muted: #667085;
+      --line: #d7dde8;
+      --blue: #2563eb;
+      --blue-soft: #eaf1ff;
+      --green: #15803d;
+      --green-soft: #e8f7ee;
+      --amber: #b45309;
+      --amber-soft: #fff4df;
+      --red: #b91c1c;
+      --red-soft: #feecec;
+      --violet: #7c3aed;
+      --violet-soft: #f1eaff;
+      --shadow: 0 18px 50px rgba(15, 23, 42, 0.08);
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 280px minmax(0, 1fr);
+      min-height: 100vh;
+    }
+
+    aside {
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow: auto;
+      background: #111827;
+      color: #f9fafb;
+      padding: 28px 22px;
+    }
+
+    .nav-title {
+      font-size: 18px;
+      font-weight: 760;
+      line-height: 1.25;
+      margin-bottom: 8px;
+    }
+
+    .nav-subtitle {
+      color: #cbd5e1;
+      font-size: 13px;
+      margin-bottom: 24px;
+    }
+
+    nav a {
+      display: block;
+      color: #e5e7eb;
+      padding: 8px 10px;
+      border-radius: 8px;
+      text-decoration: none;
+      margin: 3px 0;
+    }
+
+    nav a:hover { background: rgba(255,255,255,.08); }
+
+    main {
+      padding: 34px;
+    }
+
+    .hero, section {
+      max-width: 1200px;
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      box-shadow: var(--shadow);
+    }
+
+    .hero {
+      padding: 32px;
+      margin-bottom: 22px;
+    }
+
+    .eyebrow {
+      color: var(--blue);
+      font-weight: 760;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      font-size: 12px;
+      margin-bottom: 10px;
+    }
+
+    h1 {
+      margin: 0 0 14px;
+      font-size: clamp(34px, 5vw, 58px);
+      line-height: 1.02;
+      letter-spacing: 0;
+    }
+
+    .lead {
+      max-width: 880px;
+      margin: 0;
+      color: #344054;
+      font-size: 18px;
+    }
+
+    section {
+      margin: 22px 0;
+      padding: 26px;
+    }
+
+    h2 {
+      margin: 0 0 14px;
+      font-size: 26px;
+      letter-spacing: 0;
+    }
+
+    h3 {
+      margin: 22px 0 8px;
+      font-size: 17px;
+    }
+
+    p { margin: 0 0 12px; }
+    ul, ol { margin-top: 8px; padding-left: 22px; }
+    li { margin: 6px 0; }
+
+    .status-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 26px;
+    }
+
+    .status {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 12px;
+      background: #fbfdff;
+    }
+
+    .status b {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      margin-bottom: 4px;
+    }
+
+    .callout {
+      border-left: 5px solid var(--blue);
+      background: var(--blue-soft);
+      border-radius: 10px;
+      padding: 14px 16px;
+      margin: 16px 0;
+    }
+
+    .callout.good { border-left-color: var(--green); background: var(--green-soft); }
+    .callout.warn { border-left-color: var(--amber); background: var(--amber-soft); }
+    .callout.bad { border-left-color: var(--red); background: var(--red-soft); }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .card {
+      border: 1px solid var(--line);
+      background: #fbfdff;
+      border-radius: 10px;
+      padding: 16px;
+    }
+
+    .card strong {
+      display: block;
+      font-size: 16px;
+      margin-bottom: 6px;
+    }
+
+    .lane {
+      border-top: 5px solid var(--blue);
+      min-height: 170px;
+    }
+
+    .lane.parser { border-top-color: var(--green); }
+    .lane.workflow { border-top-color: var(--violet); }
+    .lane.qa { border-top-color: var(--amber); }
+    .lane.reliability { border-top-color: var(--red); }
+    .lane.structure { border-top-color: #475569; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      overflow: hidden;
+      margin: 14px 0;
+      background: white;
+    }
+
+    th, td {
+      padding: 12px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      background: #f1f5f9;
+      color: #475569;
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+    }
+
+    tr:last-child td { border-bottom: 0; }
+
+    .badge {
+      display: inline-block;
+      border-radius: 999px;
+      padding: 3px 9px;
+      font-weight: 760;
+      font-size: 12px;
+    }
+
+    .p0 { background: var(--red-soft); color: var(--red); }
+    .p1 { background: var(--amber-soft); color: var(--amber); }
+    .p2 { background: var(--blue-soft); color: var(--blue); }
+    .p3 { background: var(--green-soft); color: var(--green); }
+
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 16px;
+    }
+
+    .step {
+      min-height: 110px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 12px;
+      background: #f8fafc;
+    }
+
+    .step span {
+      display: inline-flex;
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      align-items: center;
+      justify-content: center;
+      background: var(--blue);
+      color: white;
+      font-weight: 760;
+      margin-bottom: 8px;
+      font-size: 13px;
+    }
+
+    pre, code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+
+    pre {
+      background: #0f172a;
+      color: #e2e8f0;
+      border-radius: 10px;
+      padding: 16px;
+      overflow: auto;
+      font-size: 13px;
+    }
+
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+
+    footer {
+      max-width: 1200px;
+      color: var(--muted);
+      font-size: 13px;
+      padding: 10px 0 40px;
+    }
+
+    @media (max-width: 1000px) {
+      .layout { grid-template-columns: 1fr; }
+      aside { position: relative; height: auto; }
+      main { padding: 18px; }
+      .status-grid, .cards, .flow, .two-col { grid-template-columns: 1fr; }
+    }
+
+    @media print {
+      aside { display: none; }
+      .layout { display: block; }
+      body { background: white; }
+      main { padding: 0; }
+      section, .hero { box-shadow: none; break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <aside>
+      <div class="nav-title">SPC App Improvement Workflow</div>
+      <div class="nav-subtitle">A simple system for bugs, limits, specs, testing, and release decisions.</div>
+      <nav>
+        <a href="#summary">Summary</a>
+        <a href="#operating-rule">Operating Rule</a>
+        <a href="#lanes">Improvement Lanes</a>
+        <a href="#priority">Priority</a>
+        <a href="#card">Work Card</a>
+        <a href="#roadmap">Roadmap</a>
+        <a href="#testing">Test Evidence</a>
+        <a href="#agent-flow">Agent Flow</a>
+        <a href="#do-next">What To Do Next</a>
+      </nav>
+    </aside>
+
+    <main>
+      <header class="hero" id="summary">
+        <div class="eyebrow">Product Process</div>
+        <h1>Improve the SPC app one verified work card at a time.</h1>
+        <p class="lead">Your app is already useful. The next problem is control: bugs, parser limits, chart issues, and workflow ideas need a structure so they do not disappear into a long chat thread.</p>
+
+        <div class="status-grid">
+          <div class="status"><b>Current focus</b>Visualization-first app</div>
+          <div class="status"><b>Main risk</b>Wrong or misleading chart output</div>
+          <div class="status"><b>Best unit</b>One work card</div>
+          <div class="status"><b>Review output</b>Short report + visual evidence</div>
+        </div>
+      </header>
+
+      <section id="operating-rule">
+        <h2>Operating Rule</h2>
+        <div class="callout good">
+          <strong>One issue becomes one card. One card becomes one focused fix. One fix gets one test report.</strong>
+        </div>
+        <p>Do not treat the chat as the source of truth. Use the chat to discuss, but capture the actual work as a small card with expected behavior and pass condition.</p>
+
+        <div class="flow">
+          <div class="step"><span>1</span><strong>Find</strong><br>Bug or limitation appears during real use.</div>
+          <div class="step"><span>2</span><strong>Capture</strong><br>Write one work card.</div>
+          <div class="step"><span>3</span><strong>Rank</strong><br>P0, P1, P2, or P3.</div>
+          <div class="step"><span>4</span><strong>Diagnose</strong><br>Read files and reproduce before editing.</div>
+          <div class="step"><span>5</span><strong>Build</strong><br>Fix the narrow behavior.</div>
+          <div class="step"><span>6</span><strong>Test</strong><br>Run unit, UI, and visual checks.</div>
+          <div class="step"><span>7</span><strong>Decide</strong><br>Commit or revise.</div>
+        </div>
+      </section>
+
+      <section id="lanes">
+        <h2>Improvement Lanes</h2>
+        <div class="cards">
+          <div class="card lane">
+            <strong>Chart Correctness</strong>
+            Wrong spec lines, blank traces, unreadable labels, bad multi-dimension rendering. This is the highest-trust lane.
+          </div>
+          <div class="card lane parser">
+            <strong>Parser Robustness</strong>
+            Vendor headers, metadata detection, typos, shifted columns, file format variation.
+          </div>
+          <div class="card lane workflow">
+            <strong>Workflow Speed</strong>
+            Batch export, saved presets, fewer clicks, reusable dimension sets, report-ready naming.
+          </div>
+          <div class="card lane qa">
+            <strong>Visual QA</strong>
+            Golden screenshots, live chart checks, not-blank validation, label/spec-line verification.
+          </div>
+          <div class="card lane reliability">
+            <strong>Reliability</strong>
+            Local server, reboot behavior, dependencies, startup scripts, app health checks.
+          </div>
+          <div class="card lane structure">
+            <strong>Code Structure</strong>
+            Refactors that make chart, parser, UI, export, and state logic easier to change safely.
+          </div>
+        </div>
+      </section>
+
+      <section id="priority">
+        <h2>Priority</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Priority</th>
+              <th>Meaning</th>
+              <th>Example</th>
+              <th>Handling</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="badge p0">P0</span></td>
+              <td>App cannot be used.</td>
+              <td>App will not start, file cannot load.</td>
+              <td>Stop current work and fix first.</td>
+            </tr>
+            <tr>
+              <td><span class="badge p1">P1</span></td>
+              <td>Output can be wrong or misleading.</td>
+              <td>Spec line wrong, chart blank, grouping wrong.</td>
+              <td>Fix before trusting the app for real reports.</td>
+            </tr>
+            <tr>
+              <td><span class="badge p2">P2</span></td>
+              <td>Workflow is slower than needed.</td>
+              <td>Too many clicks, repetitive chart exports.</td>
+              <td>Batch into focused workflow upgrades.</td>
+            </tr>
+            <tr>
+              <td><span class="badge p3">P3</span></td>
+              <td>Cosmetic or nice-to-have.</td>
+              <td>Button position, copy polish, minor layout tweak.</td>
+              <td>Do only when nearby or after higher priorities.</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="card">
+        <h2>Work Card</h2>
+        <p>This is the format to send when you find a bug or improvement. It is intentionally small.</p>
+        <pre>## Title
+
+## Type
+Bug / Limitation / UX improvement / Parser issue / Chart rendering issue / Export issue
+
+## Priority
+P0 / P1 / P2 / P3
+
+## What I was doing
+Page:
+File:
+Sheet:
+Dimension:
+Chart type:
+Controls selected:
+
+## What happened
+
+## What I expected
+
+## Evidence
+Screenshot:
+File path:
+Notes:
+
+## Pass condition
+How we know the issue is fixed.
+
+## Out of scope
+What should not be changed while fixing this.</pre>
+      </section>
+
+      <section id="roadmap">
+        <h2>Recommended Roadmap</h2>
+        <div class="two-col">
+          <div class="card">
+            <strong>Phase 1: Trust the Chart</strong>
+            <ul>
+              <li>Different USL/LSL values across dimensions render clearly.</li>
+              <li>Single-point dimensions are visible.</li>
+              <li>Box Plot and Histogram handle multi-dim specs.</li>
+              <li>Labels stay readable with multiple selected dimensions.</li>
+            </ul>
+          </div>
+          <div class="card">
+            <strong>Phase 2: Trust the Parser</strong>
+            <ul>
+              <li>Header detection handles common vendor variation.</li>
+              <li>Metadata/factor columns are detected reliably.</li>
+              <li>Vendor typos are surfaced as suggestions.</li>
+              <li>Detection results are visible to the user.</li>
+            </ul>
+          </div>
+          <div class="card">
+            <strong>Phase 3: Reduce Repetition</strong>
+            <ul>
+              <li>Batch export remains stable.</li>
+              <li>Last-used controls can be reused safely.</li>
+              <li>Common dimension sets can become presets.</li>
+              <li>Export names are predictable.</li>
+            </ul>
+          </div>
+          <div class="card">
+            <strong>Phase 4: Make Testing Routine</strong>
+            <ul>
+              <li>SPC test agent runs after changes.</li>
+              <li>HTML reports summarize test evidence.</li>
+              <li>Golden screenshots cover key chart states.</li>
+              <li>Failures explain what visually changed.</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <section id="testing">
+        <h2>Test Evidence Required</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Issue Type</th>
+              <th>Required Evidence</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>Chart correctness</td><td>Unit test plus live chart screenshot or golden snapshot.</td></tr>
+            <tr><td>Parser robustness</td><td>Real-file parsing check or fixture test.</td></tr>
+            <tr><td>Batch export</td><td>ZIP generation test plus one exported PNG check.</td></tr>
+            <tr><td>UI workflow</td><td>Live UI smoke test with the exact controls used.</td></tr>
+            <tr><td>Server/reliability</td><td>Process/port check plus HTTP response.</td></tr>
+            <tr><td>Code refactor</td><td>Existing tests pass and no user-facing behavior changes.</td></tr>
+          </tbody>
+        </table>
+        <div class="callout bad">
+          For chart changes, unit tests alone are not enough. The chart must be visually checked because the bug may be in rendering, labels, scale, or trace visibility.
+        </div>
+      </section>
+
+      <section id="agent-flow">
+        <h2>Agent Flow</h2>
+        <ol>
+          <li>Lead agent restates the work card and assigns lane/priority.</li>
+          <li>Diagnosis agent inspects files, data, and code before any edit.</li>
+          <li>Implementation agent fixes only that card.</li>
+          <li>Test agent runs unit, UI, and visual checks.</li>
+          <li>Lead agent writes a short result report with evidence and remaining risk.</li>
+        </ol>
+        <div class="callout">
+          The user should review the work card and visual evidence, not a giant transcript.
+        </div>
+      </section>
+
+      <section id="do-next">
+        <h2>What To Do Next</h2>
+        <ol>
+          <li>List the bugs and improvements you already found as titles only.</li>
+          <li>Mark each one P0/P1/P2/P3.</li>
+          <li>Pick one P1 chart/parser issue first.</li>
+          <li>Create a full work card for that one issue.</li>
+          <li>Let the agent team diagnose, implement, and test only that card.</li>
+        </ol>
+        <pre>Fast capture format:
+
+Title:
+Priority:
+File:
+Sheet:
+Dimension:
+Chart type:
+What happened:
+Expected:
+Screenshot:</pre>
+      </section>
+
+      <footer>
+        Durable companion file: docs/product/improvement-workflow.md
+      </footer>
+    </main>
+  </div>
+</body>
+</html>

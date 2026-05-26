@@ -49,6 +49,67 @@ def build_combined_chart(
     section_labels = compute_sections(df, section_by_fields)
     unique_sections = list(dict.fromkeys(section_labels))
 
+    def _section_field_series(field_name: str) -> pd.Series:
+        if field_name == "Factory":
+            if "_factory" in df.columns:
+                return df["_factory"].fillna("?").astype(str)
+            return pd.Series("?", index=df.index)
+        if field_name == "Source File":
+            if "_source_file" in df.columns:
+                return df["_source_file"].fillna("?").astype(str)
+            return pd.Series("?", index=df.index)
+        if field_name in df.columns:
+            return df[field_name].fillna("?").astype(str)
+        return pd.Series("?", index=df.index)
+
+    section_field_values = [_section_field_series(field) for field in section_by_fields]
+    section_parts: dict[str, tuple[str, ...]] = {}
+    for sec_label in unique_sections:
+        matching_rows = section_labels[section_labels == sec_label]
+        if matching_rows.empty or not section_field_values:
+            section_parts[sec_label] = (str(sec_label),)
+            continue
+        first_idx = matching_rows.index[0]
+        section_parts[sec_label] = tuple(str(values.loc[first_idx]) for values in section_field_values)
+
+    if len(section_by_fields) > 1:
+        unique_sections = sorted(unique_sections, key=lambda label: section_parts.get(label, (str(label),)))
+
+    def _contiguous_header_ranges(level: int) -> list[tuple[str, int, int]]:
+        """Return contiguous paper header ranges for a section hierarchy level."""
+        ranges: list[tuple[str, int, int]] = []
+        current_key: tuple[str, ...] | None = None
+        current_label: str | None = None
+        current_start: int | None = None
+        current_end: int | None = None
+
+        for sec_label in unique_sections:
+            sx0, sx1 = section_x_ranges[sec_label]
+            parts = section_parts.get(sec_label, (str(sec_label),))
+            if level >= len(parts):
+                label = str(sec_label)
+                group_key = parts
+            else:
+                label = parts[level]
+                group_key = parts[: level + 1]
+
+            if current_key == group_key and current_end is not None:
+                current_end = sx1
+                continue
+
+            if current_label is not None and current_start is not None and current_end is not None:
+                ranges.append((current_label, current_start, current_end))
+
+            current_key = group_key
+            current_label = label
+            current_start = sx0
+            current_end = sx1
+
+        if current_label is not None and current_start is not None and current_end is not None:
+            ranges.append((current_label, current_start, current_end))
+
+        return ranges
+
     row_labels = compute_row_groups(df, row_by)
     unique_rows = list(dict.fromkeys(row_labels))
     n_rows = len(unique_rows)
@@ -114,19 +175,19 @@ def build_combined_chart(
 
     legend_shown: set[str] = set()
 
-    all_tick_vals: list[int] = []
+    all_tick_vals: list[float] = []
     all_tick_text: list[str] = []
-    section_boundaries: list[float] = []
+    section_boundaries: list[tuple[float, int]] = []
 
     x_offset = 0
     section_x_ranges: dict[str, tuple[int, int]] = {}
-    dim_x_positions: OrderedDict[tuple[str, str], list[int]] = OrderedDict()
+    dim_x_positions: OrderedDict[tuple[str, str], list[float]] = OrderedDict()
 
     for sec_idx, sec_label in enumerate(unique_sections):
         section_start_x = x_offset
         for dno, (col_labels, point_nums, nominals, usls, lsls) in dim_point_info.items():  # type: ignore[assignment]
             n_points = len(col_labels)
-            x_positions = list(range(x_offset, x_offset + n_points))
+            x_positions = [x_offset + i + 0.5 for i in range(n_points)]
             dim_x_positions[(sec_label, dno)] = x_positions
 
             for xi, pn in zip(x_positions, point_nums):
@@ -137,7 +198,14 @@ def build_combined_chart(
         section_end_x = x_offset
         section_x_ranges[sec_label] = (section_start_x, section_end_x)
         if sec_idx < len(unique_sections) - 1:
-            section_boundaries.append(x_offset + section_gap / 2)
+            current_parts = section_parts.get(sec_label, (str(sec_label),))
+            next_parts = section_parts.get(unique_sections[sec_idx + 1], (str(unique_sections[sec_idx + 1]),))
+            common_prefix = 0
+            for left, right in zip(current_parts, next_parts):
+                if left != right:
+                    break
+                common_prefix += 1
+            section_boundaries.append((x_offset + section_gap / 2, common_prefix))
             x_offset += section_gap
 
     for row_idx, row_label in enumerate(unique_rows):
@@ -317,8 +385,14 @@ def build_combined_chart(
                             **rk,
                         )
 
-    for bx in section_boundaries:
-        fig.add_vline(x=bx, line=dict(color="rgba(100,116,139,0.5)", width=1.5, dash="solid"))
+    for bx, common_prefix in section_boundaries:
+        if len(section_by_fields) <= 1 or common_prefix == 0:
+            line = dict(color="rgba(71,85,105,0.55)", width=1.4, dash="solid")
+        elif common_prefix < len(section_by_fields) - 1:
+            line = dict(color="rgba(100,116,139,0.35)", width=1.0, dash="solid")
+        else:
+            line = dict(color="rgba(148,163,184,0.28)", width=0.7, dash="solid")
+        fig.add_vline(x=bx, line=line)
 
     annotations: list[dict] = []
 
@@ -365,6 +439,9 @@ def build_combined_chart(
     )
 
     chart_height = 350 * n_rows if use_row_facets else 620
+    top_margin = 120
+    if len(section_by_fields) > 1:
+        top_margin = max(top_margin, 105 + 34 * len(section_by_fields))
 
     fig.update_layout(
         title=dict(
@@ -379,7 +456,7 @@ def build_combined_chart(
             xanchor="center",
         ),
         height=chart_height,
-        margin=dict(l=50, r=120, t=120, b=80),
+        margin=dict(l=50, r=120, t=top_margin, b=80),
         legend=dict(
             title=dict(text=color_by if color_by != "None" else ""),
             orientation="v",
@@ -456,61 +533,127 @@ def build_combined_chart(
     for val, label in zip(spec_tickvals, spec_ticktext):
         annotations.append(
             dict(
-                x=0.006,
+                x=0.0,
                 y=val,
                 xref="paper",
                 yref="y",
                 text=f"<b>{label}</b>",
                 showarrow=False,
                 xanchor="left",
+                xshift=5,
                 font=dict(size=10, color="rgba(220,38,38,0.9)", family="Arial Black"),
                 bgcolor="rgba(255,255,255,0.7)",
             )
         )
     fig.update_layout(annotations=annotations)
 
-    # ----- Factory / section header bands (paper coordinates) -----
+    # ----- Section header bands (paper coordinates) -----
     total_x_span = x_offset  # total x-axis data range
-    if total_x_span > 0 and len(unique_sections) > 1:
+    show_section_headers = total_x_span > 0 and (
+        len(unique_sections) > 1 or len(section_by_fields) > 1
+    )
+    if show_section_headers:
         header_shapes: list[dict] = []
-        section_centers: list[tuple[float, str]] = []
-        for sec_label, (sx0, sx1) in section_x_ranges.items():
-            # Map data x-range to paper coordinates [0, 1]
-            px0 = sx0 / total_x_span
-            px1 = sx1 / total_x_span
-            center_x = (px0 + px1) / 2
-            section_centers.append((center_x, sec_label))
-            header_shapes.append(
-                dict(
-                    type="rect",
-                    xref="paper",
-                    yref="paper",
-                    x0=px0,
-                    x1=px1,
-                    y0=1.01,
-                    y1=1.07,
-                    fillcolor="#F1F5F9",
-                    line=dict(color="#E2E8F0", width=1),
-                    layer="above",
+        section_centers: list[tuple[float, str, float, str]] = []
+
+        if len(section_by_fields) > 1:
+            header_row_h = 0.045
+            header_gap = 0.003
+            label_row_h = 0.034
+            base_y0 = 1.005
+            value_colors = ["#F7F8FA", "#EEF2F6", "#F3F4EF", "#ECE9DC"]
+            field_fill = "#D8D6C8"
+            value_line = "#D1D5DB"
+            field_line = "#B8B4A6"
+
+            for level, field_name in enumerate(reversed(section_by_fields)):
+                original_level = len(section_by_fields) - 1 - level
+                row_y0 = base_y0 + level * (header_row_h + label_row_h + header_gap)
+                row_y1 = row_y0 + header_row_h
+                field_label_y0 = row_y1
+                field_label_y1 = row_y1 + label_row_h
+                value_fill = value_colors[min(level, len(value_colors) - 1)]
+
+                for label, sx0, sx1 in _contiguous_header_ranges(original_level):
+                    px0 = sx0 / total_x_span
+                    px1 = sx1 / total_x_span
+                    center_x = (px0 + px1) / 2
+                    section_centers.append((center_x, label, (row_y0 + row_y1) / 2, "value"))
+                    header_shapes.append(
+                        dict(
+                            type="rect",
+                            xref="paper",
+                            yref="paper",
+                            x0=px0,
+                            x1=px1,
+                            y0=row_y0,
+                            y1=row_y1,
+                            fillcolor=value_fill,
+                            line=dict(color=value_line, width=1),
+                            layer="above",
+                        )
+                    )
+
+                # JMP-style field-name row spanning the full plot width.
+                header_shapes.append(
+                    dict(
+                        type="rect",
+                        xref="paper",
+                        yref="paper",
+                        x0=0,
+                        x1=1,
+                        y0=field_label_y0,
+                        y1=field_label_y1,
+                        fillcolor=field_fill,
+                        line=dict(color=field_line, width=1),
+                        layer="above",
+                    )
                 )
-            )
+                section_centers.append(
+                    (0.5, field_name, (field_label_y0 + field_label_y1) / 2, "field")
+                )
+        else:
+            for sec_label, (sx0, sx1) in section_x_ranges.items():
+                px0 = sx0 / total_x_span
+                px1 = sx1 / total_x_span
+                center_x = (px0 + px1) / 2
+                section_centers.append((center_x, sec_label, 1.04, "value"))
+                header_shapes.append(
+                    dict(
+                        type="rect",
+                        xref="paper",
+                        yref="paper",
+                        x0=px0,
+                        x1=px1,
+                        y0=1.01,
+                        y1=1.07,
+                        fillcolor="#F1F5F9",
+                        line=dict(color="#E2E8F0", width=1),
+                        layer="above",
+                    )
+                )
+
         # Merge with existing shapes (USL/LSL lines)
         existing_shapes = list(fig.layout.shapes or [])
         fig.update_layout(shapes=existing_shapes + header_shapes)
 
         # Add centered section labels
-        for cx, sec_label in section_centers:
+        for cx, sec_label, cy, label_kind in section_centers:
             annotations.append(
                 dict(
                     x=cx,
-                    y=1.04,
+                    y=cy,
                     xref="paper",
                     yref="paper",
                     text=f"<b>{sec_label}</b>",
                     showarrow=False,
                     xanchor="center",
                     yanchor="middle",
-                    font=dict(size=11, color="#334155"),
+                    font=dict(
+                        size=12 if label_kind == "field" else 11,
+                        color="#1F2937" if label_kind == "field" else "#334155",
+                        family="Arial Black" if label_kind == "field" else "Arial",
+                    ),
                 )
             )
         fig.update_layout(annotations=annotations)

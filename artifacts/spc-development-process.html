@@ -1,0 +1,442 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SPC App Development Process</title>
+  <style>
+    :root {
+      --bg: #f6f7fb;
+      --paper: #ffffff;
+      --ink: #111827;
+      --muted: #667085;
+      --line: #d7dde8;
+      --blue: #2563eb;
+      --blue-soft: #eaf1ff;
+      --green: #15803d;
+      --green-soft: #e8f7ee;
+      --amber: #b45309;
+      --amber-soft: #fff4df;
+      --red: #b91c1c;
+      --red-soft: #feecec;
+      --shadow: 0 18px 50px rgba(15, 23, 42, 0.08);
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 280px minmax(0, 1fr);
+      min-height: 100vh;
+    }
+
+    aside {
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow: auto;
+      background: #111827;
+      color: #f9fafb;
+      padding: 28px 22px;
+    }
+
+    .nav-title {
+      font-size: 18px;
+      font-weight: 760;
+      line-height: 1.25;
+      margin-bottom: 8px;
+    }
+
+    .nav-subtitle {
+      color: #cbd5e1;
+      font-size: 13px;
+      margin-bottom: 24px;
+    }
+
+    nav a {
+      display: block;
+      color: #e5e7eb;
+      padding: 8px 10px;
+      border-radius: 8px;
+      text-decoration: none;
+      margin: 3px 0;
+    }
+
+    nav a:hover { background: rgba(255,255,255,.08); }
+
+    main { padding: 34px; }
+
+    .hero, section {
+      max-width: 1180px;
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      box-shadow: var(--shadow);
+    }
+
+    .hero {
+      padding: 32px;
+      margin-bottom: 22px;
+    }
+
+    .eyebrow {
+      color: var(--blue);
+      font-weight: 760;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      font-size: 12px;
+      margin-bottom: 10px;
+    }
+
+    h1 {
+      margin: 0 0 14px;
+      font-size: clamp(34px, 5vw, 58px);
+      line-height: 1.02;
+      letter-spacing: 0;
+    }
+
+    .lead {
+      max-width: 870px;
+      margin: 0;
+      color: #344054;
+      font-size: 18px;
+    }
+
+    section {
+      margin: 22px 0;
+      padding: 26px;
+    }
+
+    h2 {
+      margin: 0 0 14px;
+      font-size: 26px;
+      letter-spacing: 0;
+    }
+
+    h3 {
+      margin: 20px 0 8px;
+      font-size: 17px;
+    }
+
+    p { margin: 0 0 12px; }
+    ul, ol { margin-top: 8px; padding-left: 22px; }
+    li { margin: 6px 0; }
+
+    .status-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 26px;
+    }
+
+    .status {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 12px;
+      background: #fbfdff;
+    }
+
+    .status b {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      margin-bottom: 4px;
+    }
+
+    .callout {
+      border-left: 5px solid var(--blue);
+      background: var(--blue-soft);
+      border-radius: 10px;
+      padding: 14px 16px;
+      margin: 16px 0;
+    }
+
+    .callout.good { border-left-color: var(--green); background: var(--green-soft); }
+    .callout.warn { border-left-color: var(--amber); background: var(--amber-soft); }
+    .callout.bad { border-left-color: var(--red); background: var(--red-soft); }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .card {
+      border: 1px solid var(--line);
+      background: #fbfdff;
+      border-radius: 10px;
+      padding: 16px;
+    }
+
+    .card strong {
+      display: block;
+      font-size: 16px;
+      margin-bottom: 6px;
+    }
+
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 16px;
+    }
+
+    .step {
+      min-height: 120px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 12px;
+      background: #f8fafc;
+    }
+
+    .step span {
+      display: inline-flex;
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      align-items: center;
+      justify-content: center;
+      background: var(--blue);
+      color: white;
+      font-weight: 760;
+      margin-bottom: 8px;
+      font-size: 13px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      overflow: hidden;
+      margin: 14px 0;
+      background: white;
+    }
+
+    th, td {
+      padding: 12px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      background: #f1f5f9;
+      color: #475569;
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+    }
+
+    tr:last-child td { border-bottom: 0; }
+
+    pre, code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+
+    pre {
+      background: #0f172a;
+      color: #e2e8f0;
+      border-radius: 10px;
+      padding: 16px;
+      overflow: auto;
+      font-size: 13px;
+    }
+
+    footer {
+      max-width: 1180px;
+      color: var(--muted);
+      font-size: 13px;
+      padding: 10px 0 40px;
+    }
+
+    @media (max-width: 1000px) {
+      .layout { grid-template-columns: 1fr; }
+      aside { position: relative; height: auto; }
+      main { padding: 18px; }
+      .status-grid, .cards, .flow { grid-template-columns: 1fr; }
+    }
+
+    @media print {
+      aside { display: none; }
+      .layout { display: block; }
+      body { background: white; }
+      main { padding: 0; }
+      section, .hero { box-shadow: none; break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <aside>
+      <div class="nav-title">SPC Development Process</div>
+      <div class="nav-subtitle">A lightweight control system for your first software project.</div>
+      <nav>
+        <a href="#summary">Summary</a>
+        <a href="#roles">Role Split</a>
+        <a href="#loop">Core Loop</a>
+        <a href="#checklists">Checklists</a>
+        <a href="#rules">Rules</a>
+        <a href="#current">Current State</a>
+        <a href="#next">Next Step</a>
+      </nav>
+    </aside>
+
+    <main>
+      <header class="hero" id="summary">
+        <div class="eyebrow">Development Operating System</div>
+        <h1>Use structure for control, not bureaucracy.</h1>
+        <p class="lead">The app is improving, but the process needs visible checkpoints so you feel in control. The goal is not to become a software engineer overnight. The goal is to run a clear product-quality loop with me doing the implementation work.</p>
+
+        <div class="status-grid">
+          <div class="status"><b>Your role</b>Product owner + quality engineer</div>
+          <div class="status"><b>Agent role</b>Plan, code, test, explain</div>
+          <div class="status"><b>Unit of work</b>One work card</div>
+          <div class="status"><b>Safety rule</b>Code -> test -> commit</div>
+        </div>
+      </header>
+
+      <section id="roles">
+        <h2>Role Split</h2>
+        <div class="cards">
+          <div class="card">
+            <strong>You own product truth</strong>
+            <ul>
+              <li>Real usage problems</li>
+              <li>Screenshots and files</li>
+              <li>What feels wrong</li>
+              <li>What good should look like</li>
+              <li>Final visual judgment</li>
+            </ul>
+          </div>
+          <div class="card">
+            <strong>I own engineering execution</strong>
+            <ul>
+              <li>Work cards</li>
+              <li>Priority and scope</li>
+              <li>Implementation plan</li>
+              <li>Code changes and tests</li>
+              <li>Commit checkpoints</li>
+            </ul>
+          </div>
+        </div>
+        <div class="callout good">
+          You do not need to become the coder. You need to become a clear product owner and quality judge.
+        </div>
+      </section>
+
+      <section id="loop">
+        <h2>Core Loop</h2>
+        <div class="flow">
+          <div class="step"><span>1</span><strong>Observe</strong><br>Use the app normally and send rough issues.</div>
+          <div class="step"><span>2</span><strong>Capture</strong><br>I turn each issue into a work card.</div>
+          <div class="step"><span>3</span><strong>Select</strong><br>We pick one P1/P2 card to fix.</div>
+          <div class="step"><span>4</span><strong>Build</strong><br>I implement, test, and commit.</div>
+          <div class="step"><span>5</span><strong>Review</strong><br>You check the app visually.</div>
+        </div>
+      </section>
+
+      <section id="checklists">
+        <h2>Checklists</h2>
+        <h3>Session Start</h3>
+        <pre>Current branch:
+Last commit:
+Uncommitted changes:
+Today’s target:
+Work card:
+Test plan:
+Commit plan:</pre>
+
+        <h3>Session End</h3>
+        <pre>Changed files:
+Tests run:
+Known risk:
+Commit hash:
+Next recommended card:</pre>
+      </section>
+
+      <section id="rules">
+        <h2>Rules</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Rule</th>
+              <th>Why</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>One meaningful change needs one work card.</td>
+              <td>Prevents random edits and keeps intent visible.</td>
+            </tr>
+            <tr>
+              <td>Do not fix ten things together.</td>
+              <td>Large mixed changes are hard to test and hard to undo.</td>
+            </tr>
+            <tr>
+              <td>Commit after a coherent batch.</td>
+              <td>Creates a recoverable checkpoint.</td>
+            </tr>
+            <tr>
+              <td>Chart changes require visual evidence.</td>
+              <td>Unit tests can pass while the chart still looks wrong.</td>
+            </tr>
+            <tr>
+              <td>Planning should be short unless risk is high.</td>
+              <td>Enough structure to stay safe, not enough to slow the work.</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="callout warn">
+          The failure mode to avoid: chat becomes the product spec, issue tracker, test log, and release checklist all at once.
+        </div>
+      </section>
+
+      <section id="current">
+        <h2>Current State</h2>
+        <ul>
+          <li>Today's fixes are committed on <code>main</code>.</li>
+          <li>Work cards exist in <code>docs/product/work-cards.md</code>.</li>
+          <li>Tests exist for chart logic, file source, and sheet selection.</li>
+          <li>The app is moving from ad-hoc edits toward a controlled loop.</li>
+        </ul>
+      </section>
+
+      <section id="next">
+        <h2>Next Step</h2>
+        <div class="callout">
+          Start next development session with one focused card:
+          <br><br>
+          <strong>WC-005: Multi-factor Section-by should render as nested JMP-style headers.</strong>
+        </div>
+        <pre>Recommended next session command:
+
+Start WC-005.
+First show me:
+- current branch
+- last commit
+- uncommitted changes
+- mini plan
+- test plan
+- commit plan
+
+Then implement only this card.</pre>
+      </section>
+
+      <footer>
+        Durable companion file: docs/product/development-process.md
+      </footer>
+    </main>
+  </div>
+</body>
+</html>

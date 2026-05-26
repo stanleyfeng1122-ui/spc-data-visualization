@@ -308,8 +308,9 @@ class TestSpecLimits:
 
         assert spec_annotations
         assert all(ann.xref == "paper" for ann in spec_annotations)
-        assert all(ann.x > 0 for ann in spec_annotations)
+        assert all(ann.x == 0 for ann in spec_annotations)
         assert all(ann.xanchor == "left" for ann in spec_annotations)
+        assert all(ann.xshift > 0 for ann in spec_annotations)
 
 
 # ---------------------------------------------------------------------------
@@ -819,6 +820,20 @@ class TestSinglePointDimension:
         t = [t for t in fig.data if t.type == "scattergl"][0]
         assert len(t.x) == 1
 
+    def test_single_x_point_is_centered_in_section_slot(self, single_point_data, common_kwargs):
+        df, dim_metas = single_point_data
+        fig = build_combined_chart(
+            df=df,
+            dim_metas=dim_metas,
+            dim_nos=["SPC_C1"],
+            section_by_fields=["Factory"],
+            y_axis_mode="Measurement values",
+            custom_yrange=None,
+            **common_kwargs,
+        )
+        t = [t for t in fig.data if t.type == "scattergl"][0]
+        assert t.x[0] == 0.5
+
     def test_no_crash_synthetic_single_point(self, common_kwargs):
         cols, meta = _make_dim_meta("SPC_X1", "Flatness", 1, nominal=0.0, usl=0.5, lsl=0.0)
         df = pd.DataFrame({cols[0]: np.random.uniform(0.0, 0.4, 12)})
@@ -833,3 +848,130 @@ class TestSinglePointDimension:
             **common_kwargs,
         )
         assert fig is not None and len(fig.data) > 0
+
+
+class TestNestedSectionHeaders:
+    def test_two_section_fields_render_parent_and_child_header_labels(self, common_kwargs):
+        cols, meta = _make_dim_meta("SPC_X1", "Flatness", 1, nominal=0.0, usl=0.5, lsl=0.0)
+        df = pd.DataFrame({cols[0]: np.random.uniform(0.0, 0.4, 16)})
+        df["_factory"] = ["LK"] * 8 + ["FJS"] * 8
+        df["RM"] = ["INN"] * 4 + ["OUT"] * 4 + ["INN"] * 4 + ["OUT"] * 4
+
+        fig = build_combined_chart(
+            df=df,
+            dim_metas=OrderedDict([("SPC_X1", meta)]),
+            dim_nos=["SPC_X1"],
+            section_by_fields=["Factory", "RM"],
+            y_axis_mode="Measurement values",
+            custom_yrange=None,
+            **common_kwargs,
+        )
+
+        annotation_text = [ann.text for ann in fig.layout.annotations or []]
+        assert "<b>Factory</b>" in annotation_text
+        assert "<b>RM</b>" in annotation_text
+        assert "<b>LK</b>" in annotation_text
+        assert "<b>FJS</b>" in annotation_text
+        assert annotation_text.count("<b>INN</b>") == 2
+        assert annotation_text.count("<b>OUT</b>") == 2
+        field_annotations = [
+            ann for ann in fig.layout.annotations or [] if ann.text in {"<b>Factory</b>", "<b>RM</b>"}
+        ]
+        assert field_annotations
+        assert all(ann.font.size == 12 for ann in field_annotations)
+        field_row_shapes = [
+            shape
+            for shape in fig.layout.shapes or []
+            if getattr(shape, "xref", None) == "paper"
+            and getattr(shape, "yref", None) == "paper"
+            and getattr(shape, "x0", None) == 0
+            and getattr(shape, "x1", None) == 1
+            and getattr(shape, "fillcolor", None) == "#D8D6C8"
+        ]
+        assert len(field_row_shapes) == 2
+
+    def test_multi_field_headers_render_when_only_one_section_is_visible(self, common_kwargs):
+        cols, meta = _make_dim_meta("SPC_X1", "Flatness", 1, nominal=0.0, usl=0.5, lsl=0.0)
+        df = pd.DataFrame({cols[0]: np.random.uniform(0.0, 0.4, 8)})
+        df["_factory"] = ["LK"] * 8
+        df["RM"] = ["INN"] * 8
+
+        fig = build_combined_chart(
+            df=df,
+            dim_metas=OrderedDict([("SPC_X1", meta)]),
+            dim_nos=["SPC_X1"],
+            section_by_fields=["Factory", "RM"],
+            y_axis_mode="Measurement values",
+            custom_yrange=None,
+            **common_kwargs,
+        )
+
+        annotation_text = [ann.text for ann in fig.layout.annotations or []]
+        for expected in ["Factory", "RM", "LK", "INN"]:
+            assert f"<b>{expected}</b>" in annotation_text
+
+        header_shapes = [
+            shape
+            for shape in fig.layout.shapes or []
+            if getattr(shape, "xref", None) == "paper" and getattr(shape, "yref", None) == "paper"
+        ]
+        assert len(header_shapes) >= 4
+
+    def test_repeated_parent_sections_are_grouped_together(self, common_kwargs):
+        cols, meta = _make_dim_meta("SPC_X1", "Flatness", 1, nominal=0.0, usl=0.5, lsl=0.0)
+        df = pd.DataFrame({cols[0]: np.random.uniform(0.0, 0.4, 16)})
+        df["Extrusion Vendor"] = ["INN"] * 4 + ["NP"] * 4 + ["INN"] * 8
+        df["Extrusion Lot"] = (
+            ["H07A004C26"] * 4
+            + ["F25V001C26"] * 4
+            + ["H04A005C26"] * 4
+            + ["H04A006C26"] * 4
+        )
+
+        fig = build_combined_chart(
+            df=df,
+            dim_metas=OrderedDict([("SPC_X1", meta)]),
+            dim_nos=["SPC_X1"],
+            section_by_fields=["Extrusion Vendor", "Extrusion Lot"],
+            y_axis_mode="Measurement values",
+            custom_yrange=None,
+            **common_kwargs,
+        )
+
+        annotation_text = [ann.text for ann in fig.layout.annotations or []]
+        assert annotation_text.count("<b>INN</b>") == 1
+        assert annotation_text.count("<b>NP</b>") == 1
+        assert annotation_text.index("<b>INN</b>") < annotation_text.index("<b>NP</b>")
+        for lot in ["H04A005C26", "H04A006C26", "H07A004C26", "F25V001C26"]:
+            assert f"<b>{lot}</b>" in annotation_text
+
+    def test_three_section_fields_render_all_header_levels(self, common_kwargs):
+        cols, meta = _make_dim_meta("SPC_X1", "Flatness", 1, nominal=0.0, usl=0.5, lsl=0.0)
+        df = pd.DataFrame({cols[0]: np.random.uniform(0.0, 0.4, 16)})
+        df["CFG"] = ["CORR PP"] * 8 + ["P2 CORR"] * 8
+        df["_factory"] = ["LK"] * 8 + ["FJS"] * 8
+        df["Color"] = ["Basalt"] * 4 + ["NDA"] * 4 + ["Basalt"] * 4 + ["NDA"] * 4
+
+        fig = build_combined_chart(
+            df=df,
+            dim_metas=OrderedDict([("SPC_X1", meta)]),
+            dim_nos=["SPC_X1"],
+            section_by_fields=["CFG", "Factory", "Color"],
+            y_axis_mode="Measurement values",
+            custom_yrange=None,
+            **common_kwargs,
+        )
+
+        annotation_text = [ann.text for ann in fig.layout.annotations or []]
+        for expected in ["CFG", "Factory", "Color", "CORR PP", "P2 CORR", "LK", "FJS"]:
+            assert f"<b>{expected}</b>" in annotation_text
+        assert annotation_text.count("<b>Basalt</b>") == 2
+        assert annotation_text.count("<b>NDA</b>") == 2
+
+        header_shapes = [
+            shape
+            for shape in fig.layout.shapes or []
+            if getattr(shape, "xref", None) == "paper" and getattr(shape, "yref", None) == "paper"
+        ]
+        assert len(header_shapes) >= 6
+        assert fig.layout.margin.t >= 105 + 34 * 3

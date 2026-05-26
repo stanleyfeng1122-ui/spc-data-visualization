@@ -40,6 +40,36 @@ Small ledger of bugs and improvements captured during real app use.
 - **Priority:** P1
 - **Lane:** Chart Correctness
 - **Issue:** Red `USL-*` and `LSL-*` labels are anchored at the plot's left edge with right alignment, so they extend into the y-axis tick-label area.
-- **Expected:** Spec labels should stay readable and not collide with numeric y-axis labels.
-- **Pass condition:** Spec labels are anchored just inside the plot area with left alignment.
+- **Expected:** Spec labels should stay on the left side, remain readable, and not collide with numeric y-axis labels.
+- **Pass condition:** Spec labels are anchored just inside the left plot area with left alignment and a small x-shift.
+- **Status:** Revised after user feedback, tests passing.
+
+### WC-005: Multi-factor Section-by should render as nested JMP-style headers
+
+- **Type:** Chart rendering improvement
+- **Priority:** P1
+- **Lane:** Chart Correctness
+- **Issue:** Selecting two `Section-by` factors currently flattens them into one combined header label such as `LK INN`.
+- **Expected:** Selected section factors should render as stacked table-like header bands, similar to JMP.
+- **Pass condition:** `Section-by = [Factory, RM]` renders separate field rows and value rows such as `Factory`, `LK` / `FJS`, `RM`, `INN` / `OUT`; 3-level groupings also render all levels.
+- **Status:** Implemented, tests passing.
+
+### WC-006: Single-point profile dots should be centered in each section
+
+- **Type:** Chart rendering issue
+- **Priority:** P1
+- **Lane:** Chart Correctness
+- **Issue:** Single-point dimensions plot each dot stack at the left edge of its section, making the chart look unbalanced under the section header.
+- **Expected:** Single-point dot stacks should sit at the center of their section/point slot.
+- **Pass condition:** X positions use centered point slots, so the first single-point stack renders at `0.5` instead of `0`.
+- **Status:** Implemented, tests passing.
+
+### WC-007: Polish JMP-style nested header readability
+
+- **Type:** Chart rendering improvement
+- **Priority:** P2
+- **Lane:** Chart Correctness / Visual polish
+- **Issue:** Nested headers work structurally, but field names, row hierarchy, and dividers need clearer visual hierarchy.
+- **Expected:** Field-name rows should be visually distinct from value rows, row spacing should be readable, and major/minor dividers should have different weights.
+- **Pass condition:** Multi-factor headers use taller bands, stronger field-row styling, dynamic top margin, and hierarchy-weighted vertical dividers.
 - **Status:** Implemented, tests passing.

@@ -164,6 +164,8 @@ def compute_sections(df: pd.DataFrame, section_by_fields: list[str]) -> pd.Serie
         if field_name == "Factory":
             if "_factory" in df.columns:
                 return df["_factory"].fillna("?").astype(str)
+            if "Factory" in df.columns:
+                return df["Factory"].fillna("?").astype(str)
             return pd.Series("?", index=df.index)
         elif field_name == "Source File":
             if "_source_file" in df.columns:

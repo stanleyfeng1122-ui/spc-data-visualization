@@ -834,6 +834,22 @@ class TestSinglePointDimension:
         t = [t for t in fig.data if t.type == "scattergl"][0]
         assert t.x[0] == 0.5
 
+    def test_single_point_sections_use_compact_centered_spacing(self, single_point_data, common_kwargs):
+        df, dim_metas = single_point_data
+        fig = build_combined_chart(
+            df=df,
+            dim_metas=dim_metas,
+            dim_nos=["SPC_C1"],
+            section_by_fields=["Factory"],
+            y_axis_mode="Measurement values",
+            custom_yrange=None,
+            **common_kwargs,
+        )
+
+        x_positions = sorted({float(trace.x[0]) for trace in fig.data if trace.type == "scattergl"})
+        assert x_positions == [0.5, 1.5]
+        assert list(fig.layout.xaxis.range) == [0, 2]
+
     def test_no_crash_synthetic_single_point(self, common_kwargs):
         cols, meta = _make_dim_meta("SPC_X1", "Flatness", 1, nominal=0.0, usl=0.5, lsl=0.0)
         df = pd.DataFrame({cols[0]: np.random.uniform(0.0, 0.4, 12)})

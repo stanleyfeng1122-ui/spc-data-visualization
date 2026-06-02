@@ -53,6 +53,8 @@ def build_combined_chart(
         if field_name == "Factory":
             if "_factory" in df.columns:
                 return df["_factory"].fillna("?").astype(str)
+            if "Factory" in df.columns:
+                return df["Factory"].fillna("?").astype(str)
             return pd.Series("?", index=df.index)
         if field_name == "Source File":
             if "_source_file" in df.columns:
@@ -155,7 +157,8 @@ def build_combined_chart(
     if points_per_section == 0:
         return None
 
-    section_gap = max(3, int(points_per_section * 0.06))
+    all_dims_single_point = all(len(info[0]) == 1 for info in dim_point_info.values())
+    section_gap = 0 if all_dims_single_point else max(3, int(points_per_section * 0.06))
 
     if use_row_facets:
         fig: Figure = make_subplots(
@@ -429,6 +432,7 @@ def build_combined_chart(
     y_title = "Deviation from Nominal" if deviation_mode else ""
 
     tick_step = max(1, len(all_tick_vals) // 80)
+    x_axis_range = [0, x_offset] if x_offset > 0 else None
     tick_kwargs = dict(
         tickmode="array",
         tickvals=all_tick_vals[::tick_step],
@@ -437,6 +441,8 @@ def build_combined_chart(
         tickfont=dict(size=7, color="#000000"),
         showgrid=False,
     )
+    if x_axis_range:
+        tick_kwargs["range"] = x_axis_range
 
     chart_height = 350 * n_rows if use_row_facets else 620
     top_margin = 120

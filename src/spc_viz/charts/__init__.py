@@ -22,6 +22,7 @@ from .base import (
 from .box_plot import build_box_plot
 from .combined_profile import build_combined_chart
 from .histogram import build_histogram
+from .range_envelope import build_range_envelope_chart
 from .styling import finalize_plotly_style
 
 __all__ = [
@@ -30,6 +31,7 @@ __all__ = [
     "build_box_plot",
     "build_combined_chart",
     "build_histogram",
+    "build_range_envelope_chart",
     "calc_process_capability",
     "compute_row_groups",
     "compute_sections",

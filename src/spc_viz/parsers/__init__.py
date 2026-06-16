@@ -45,6 +45,12 @@ from .metadata import (
     coerce_shipment_date,
     detect_factory,
 )
+from .pairing import (
+    PAIR_DIM_PREFIX,
+    build_paired_dimension_map,
+    is_paired_dim_id,
+    simple_feature_name,
+)
 
 __all__ = [
     # Public API
@@ -52,6 +58,8 @@ __all__ = [
     "ParsedFile",
     "parse_excel",
     "parse_excel_multi",
+    "PAIR_DIM_PREFIX",
+    "build_paired_dimension_map",
     "detect_dimension_groups",
     "get_dimension_options",
     "get_filtered_dim_meta",
@@ -71,4 +79,6 @@ __all__ = [
     "build_meta_col_map",
     "coerce_shipment_date",
     "detect_factory",
+    "is_paired_dim_id",
+    "simple_feature_name",
 ]

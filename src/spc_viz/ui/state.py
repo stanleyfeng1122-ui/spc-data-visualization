@@ -29,13 +29,14 @@ class ChartControls:
     a changed field is ever needed.
     """
 
-    chart_type: Literal["Combined Profile", "Box Plot", "Histogram"]
+    chart_type: Literal["Combined Profile", "Box Plot", "Histogram", "Range Envelope"]
     color_by: str  # column name or sentinel "None"
     section_by_fields: list[str]
     row_by: str  # column name or sentinel "None"
     y_axis_mode: Literal["Measurement values", "Deviation from Nominal"]
     custom_yrange: list[float] | None
     hist_nbins: int
+    show_average_line: bool = False
 
 
 # ---------------------------------------------------------------------------

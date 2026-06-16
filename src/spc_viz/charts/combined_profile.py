@@ -16,12 +16,15 @@ from plotly.subplots import make_subplots
 
 from spc_viz.parsers import get_filtered_dim_meta
 from spc_viz.parsers.dimensions import DimensionMeta
+from spc_viz.parsers.pairing import is_paired_dim_id
 
 from .base import (
     MAX_TRACES_PER_GROUP,
     compute_row_groups,
     compute_sections,
     get_color_for_group,
+    has_domain_section_order,
+    section_sort_key,
 )
 
 # ---------------------------------------------------------------------------
@@ -42,6 +45,7 @@ def build_combined_chart(
     custom_color_map: dict[str, str] | None = None,
     custom_yrange: list[float] | None = None,
     selected_points: list[str] | None = None,
+    show_average_line: bool = False,
 ) -> Figure | None:
     """Build the combined profile chart with section and row facets."""
     deviation_mode = y_axis_mode == "Deviation from Nominal"
@@ -74,8 +78,16 @@ def build_combined_chart(
         first_idx = matching_rows.index[0]
         section_parts[sec_label] = tuple(str(values.loc[first_idx]) for values in section_field_values)
 
-    if len(section_by_fields) > 1:
-        unique_sections = sorted(unique_sections, key=lambda label: section_parts.get(label, (str(label),)))
+    if len(section_by_fields) > 1 or has_domain_section_order(
+        section_by_fields, section_parts.values()
+    ):
+        unique_sections = sorted(
+            unique_sections,
+            key=lambda label: section_sort_key(
+                section_by_fields,
+                section_parts.get(label, (str(label),)),
+            ),
+        )
 
     def _contiguous_header_ranges(level: int) -> list[tuple[str, int, int]]:
         """Return contiguous paper header ranges for a section hierarchy level."""
@@ -177,6 +189,7 @@ def build_combined_chart(
     nom_rep = next((v for v in first_dim_info[2] if v is not None), None)
 
     legend_shown: set[str] = set()
+    average_legend_shown = False
 
     all_tick_vals: list[float] = []
     all_tick_text: list[str] = []
@@ -283,6 +296,43 @@ def build_combined_chart(
                             fig.add_trace(trace, row=plotly_row, col=1)
                         else:
                             fig.add_trace(trace)
+
+                if show_average_line:
+                    avg_df = cell_df.loc[:, col_labels].apply(pd.to_numeric, errors="coerce")
+                    avg_y = avg_df.mean(axis=0, skipna=True).to_numpy(dtype=float)
+                    if deviation_mode:
+                        avg_y = avg_y - nom_array
+
+                    if not np.all(np.isnan(avg_y)):
+                        is_single_point = len(x_positions) == 1
+                        avg_trace_kwargs: dict = dict(
+                            x=x_positions,
+                            y=avg_y,
+                            mode="markers" if is_single_point else "lines",
+                            name="Average",
+                            legendgroup="Average",
+                            showlegend=not average_legend_shown,
+                            hovertemplate=(
+                                "Point: %{text}<br>"
+                                "Average: %{y:.4f}<br>"
+                                f"Section: {sec_label}<br>"
+                                f"Row: {row_label}"
+                                "<extra></extra>"
+                            ),
+                            text=[pn for pn in point_nums],
+                            opacity=1.0,
+                        )
+                        if is_single_point:
+                            avg_trace_kwargs["marker"] = dict(size=9, color="#DC2626")
+                        else:
+                            avg_trace_kwargs["line"] = dict(width=2.8, color="#DC2626")
+
+                        avg_trace = go.Scattergl(**avg_trace_kwargs)
+                        average_legend_shown = True
+                        if use_row_facets:
+                            fig.add_trace(avg_trace, row=plotly_row, col=1)
+                        else:
+                            fig.add_trace(avg_trace)
 
     row_kwargs_list = [dict(row=i + 1, col=1) for i in range(n_rows)] if use_row_facets else [{}]
 
@@ -401,7 +451,12 @@ def build_combined_chart(
 
     is_group = len(dim_nos) > 1
     if is_group:
-        dim_names = "/".join(dno.replace("SPC_", "") for dno in dim_nos)
+        dim_names = "/".join(
+            dim_metas[dno].description
+            if is_paired_dim_id(dno) and dno in dim_metas
+            else dno.replace("SPC_", "")
+            for dno in dim_nos
+        )
         first_desc = ""
         for dno in dim_nos:
             if dno in dim_metas and dim_metas[dno].description:
@@ -426,7 +481,10 @@ def build_combined_chart(
         dno = dim_nos[0]
         dmeta_opt = dim_metas.get(dno)
         desc = dmeta_opt.description if dmeta_opt else ""
-        title_text = f"{dno}, {desc}" if desc else dno
+        if is_paired_dim_id(dno):
+            title_text = desc or dno
+        else:
+            title_text = f"{dno}, {desc}" if desc else dno
 
     subtitle = ""  # Don't show section field names (e.g. "Factory") as subtitle
     y_title = "Deviation from Nominal" if deviation_mode else ""

@@ -13,8 +13,13 @@ from .state import ChartControls
 # Chart type + grouping + Y-axis controls
 # ---------------------------------------------------------------------------
 
-_CHART_LABELS = ["Profile", "Box Plot", "Histogram"]
-_CHART_MAP = {"Profile": "Combined Profile", "Box Plot": "Box Plot", "Histogram": "Histogram"}
+_CHART_LABELS = ["Profile", "Box Plot", "Histogram", "Envelope"]
+_CHART_MAP = {
+    "Profile": "Combined Profile",
+    "Box Plot": "Box Plot",
+    "Histogram": "Histogram",
+    "Envelope": "Range Envelope",
+}
 
 SECTION_FIELDS = [
     "Factory",
@@ -62,7 +67,7 @@ def build_chart_controls(parsed_files: list[dict], key_prefix: str = "") -> Char
     )
 
     section_by_fields: list[str]
-    if chart_type in ("Combined Profile", "Box Plot"):
+    if chart_type in ("Combined Profile", "Box Plot", "Range Envelope"):
         section_options = [m for m in meta_list if m not in ("Start Point", "SN")]
         section_options += [s for s in ("Factory", "Source File") if s not in section_options]
         section_by_fields = st.sidebar.multiselect(
@@ -74,16 +79,19 @@ def build_chart_controls(parsed_files: list[dict], key_prefix: str = "") -> Char
     else:
         section_by_fields = []
 
-    rowby_options = [m for m in meta_list if m not in ("Start Point", "SN")] + ["None"]
-    row_by: str = st.sidebar.selectbox(
-        "Row-by",
-        options=rowby_options,
-        index=len(rowby_options) - 1,
-        key=f"{key_prefix}row",
-    )
+    if chart_type != "Range Envelope":
+        rowby_options = [m for m in meta_list if m not in ("Start Point", "SN")] + ["None"]
+        row_by: str = st.sidebar.selectbox(
+            "Row-by",
+            options=rowby_options,
+            index=len(rowby_options) - 1,
+            key=f"{key_prefix}row",
+        )
+    else:
+        row_by = "None"
 
     y_axis_mode: str
-    if chart_type in ("Combined Profile", "Box Plot"):
+    if chart_type in ("Combined Profile", "Box Plot", "Range Envelope"):
         y_axis_mode = st.sidebar.selectbox(
             "Y-axis",
             options=["Measurement values", "Deviation from Nominal"],
@@ -92,6 +100,16 @@ def build_chart_controls(parsed_files: list[dict], key_prefix: str = "") -> Char
         )
     else:
         y_axis_mode = "Measurement values"
+
+    if chart_type == "Combined Profile":
+        show_average_line: bool = st.sidebar.checkbox(
+            "Average line",
+            value=False,
+            help="Highlight the average profile across visible parts in red.",
+            key=f"{key_prefix}avg_line",
+        )
+    else:
+        show_average_line = False
 
     hist_nbins: int
     if chart_type == "Histogram":
@@ -122,6 +140,7 @@ def build_chart_controls(parsed_files: list[dict], key_prefix: str = "") -> Char
         y_axis_mode=y_axis_mode,  # type: ignore[arg-type]
         hist_nbins=hist_nbins,
         custom_yrange=custom_yrange,
+        show_average_line=show_average_line,
     )
 
 

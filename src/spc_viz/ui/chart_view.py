@@ -18,6 +18,7 @@ from spc_viz.charts import (
     build_box_plot,
     build_combined_chart,
     build_histogram,
+    build_range_envelope_chart,
     finalize_plotly_style,
 )
 from spc_viz.parsers.dimensions import DimensionMeta
@@ -59,6 +60,7 @@ def _build_chart_figure(
             section_by_fields=controls.section_by_fields,
             y_axis_mode=controls.y_axis_mode,
             custom_yrange=controls.custom_yrange,
+            show_average_line=controls.show_average_line,
         )
     elif ct == "Box Plot":
         fig = build_box_plot(
@@ -70,6 +72,13 @@ def _build_chart_figure(
         fig = build_histogram(
             **common,
             nbins=controls.hist_nbins,
+        )
+    elif ct == "Range Envelope":
+        fig = build_range_envelope_chart(
+            **common,
+            section_by_fields=controls.section_by_fields,
+            y_axis_mode=controls.y_axis_mode,
+            custom_yrange=controls.custom_yrange,
         )
     else:
         fig = None

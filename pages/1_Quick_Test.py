@@ -8,7 +8,6 @@ behaviour after code changes.
 
 import os
 import sys
-from collections import OrderedDict
 
 import streamlit as st
 
@@ -18,7 +17,7 @@ if _project_root not in sys.path:
     sys.path.insert(0, _project_root)
 
 from spc_viz.config.paths import EXAMPLES_DIR
-from spc_viz.parsers import parse_excel_multi
+from spc_viz.parsers import build_paired_dimension_map, parse_excel_multi
 from spc_viz.theme import FONT_MONO, TEXT_MUTED, inject_theme
 
 # After R8, sample xlsx files live in examples/ rather than the repo root
@@ -27,6 +26,7 @@ from spc_viz.ui import (
     build_and_render_chart,
     build_chart_controls,
     build_color_pickers,
+    build_data_filters,
     build_dimension_selector,
     build_point_filter,
     prepare_and_clean,
@@ -146,13 +146,9 @@ with st.sidebar.expander(f"Files ({len(parsed_files)})", expanded=False):
         )
 
 # ---------------------------------------------------------------------------
-# Build unified dimension map
+# Build unified dimension map, pairing PP/AP bubbles that share feature + points
 # ---------------------------------------------------------------------------
-all_dimensions = OrderedDict()
-for pf in parsed_files:
-    for dno, dmeta in pf["dimensions"].items():
-        if dno not in all_dimensions:
-            all_dimensions[dno] = dmeta
+all_dimensions = build_paired_dimension_map(parsed_files)
 
 # ---------------------------------------------------------------------------
 # Shared controls
@@ -182,6 +178,7 @@ with hdr_left:
     )
 
 df_clean, dim_metas, _ = prepare_and_clean(parsed_files, selected_dim_nos)
+df_clean, active_filters = build_data_filters(parsed_files, df_clean, key_prefix=KP)
 
 custom_color_map = build_color_pickers(df_clean, controls.color_by, key_prefix=KP)
 
@@ -208,4 +205,5 @@ render_batch_export(
     selected_points,
     custom_color_map,
     key_prefix=KP,
+    data_filters=active_filters,
 )

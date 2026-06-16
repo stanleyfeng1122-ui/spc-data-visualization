@@ -8,6 +8,19 @@ import streamlit as st
 
 from spc_viz.parsers import detect_dimension_groups, get_filtered_dim_meta
 from spc_viz.parsers.dimensions import DimensionMeta
+from spc_viz.parsers.pairing import is_paired_dim_id
+
+
+def _dimension_display_label(dno: str, dmeta: DimensionMeta) -> str:
+    if is_paired_dim_id(dno):
+        return dmeta.description or dno
+    return f"{dno} — {dmeta.description}" if dmeta.description else dno
+
+
+def _dimension_group_label(dno: str, dmeta: DimensionMeta) -> str:
+    if is_paired_dim_id(dno):
+        return dmeta.description or dno
+    return dno.replace("SPC_", "")
 
 
 def build_dimension_selector(
@@ -22,7 +35,7 @@ def build_dimension_selector(
 
     dim_display_map: OrderedDict[str, str] = OrderedDict()
     for dno, dmeta in all_dimensions.items():
-        label = f"{dno} — {dmeta.description}" if dmeta.description else dno
+        label = _dimension_display_label(dno, dmeta)
         dim_display_map[label] = dno
 
     dim_no_to_label: dict[str, str] = {v: k for k, v in dim_display_map.items()}
@@ -74,7 +87,13 @@ def build_dimension_selector(
     )
     selected_dim_nos = [dim_display_map[lbl] for lbl in selected_dim_labels]
     selected_group_label = (
-        " / ".join(dno.replace("SPC_", "") for dno in selected_dim_nos) if selected_dim_nos else ""
+        " / ".join(
+            _dimension_group_label(dno, all_dimensions[dno])
+            for dno in selected_dim_nos
+            if dno in all_dimensions
+        )
+        if selected_dim_nos
+        else ""
     )
 
     if not selected_dim_nos:

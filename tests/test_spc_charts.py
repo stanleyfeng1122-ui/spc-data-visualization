@@ -23,9 +23,10 @@ from spc_viz.charts import (
     build_box_plot,
     build_combined_chart,
     build_histogram,
+    build_range_envelope_chart,
     finalize_plotly_style,
 )
-from spc_viz.parsers import DimensionMeta
+from spc_viz.parsers import DimensionMeta, build_paired_dimension_map
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -215,6 +216,60 @@ class TestCombinedProfileMultiPoint:
         t = [t for t in fig.data if t.type == "scattergl"][0]
         assert t.line is not None and t.line.width == 0.7
 
+    def test_optional_average_line_adds_red_mean_trace(self, common_kwargs):
+        cols, meta = _make_dim_meta("SPC_AVG", "Average profile", 3, nominal=1.0)
+        df = pd.DataFrame(
+            [
+                {cols[0]: 1.0, cols[1]: 2.0, cols[2]: 3.0},
+                {cols[0]: 3.0, cols[1]: 4.0, cols[2]: 5.0},
+                {cols[0]: 5.0, cols[1]: 6.0, cols[2]: 7.0},
+            ]
+        )
+        dim_metas = OrderedDict([("SPC_AVG", meta)])
+
+        fig = build_combined_chart(
+            df=df,
+            dim_metas=dim_metas,
+            dim_nos=["SPC_AVG"],
+            section_by_fields=[],
+            y_axis_mode="Measurement values",
+            custom_yrange=None,
+            show_average_line=True,
+            **common_kwargs,
+        )
+
+        avg_traces = [t for t in fig.data if t.name == "Average"]
+        assert len(avg_traces) == 1
+        assert list(avg_traces[0].y) == [3.0, 4.0, 5.0]
+        assert avg_traces[0].mode == "lines"
+        assert avg_traces[0].line.color == "#DC2626"
+        assert avg_traces[0].line.width == 2.8
+        assert fig.data[-1].name == "Average"
+
+    def test_average_line_respects_deviation_mode(self, common_kwargs):
+        cols, meta = _make_dim_meta("SPC_AVG", "Average profile", 2, nominal=1.0)
+        df = pd.DataFrame(
+            [
+                {cols[0]: 2.0, cols[1]: 4.0},
+                {cols[0]: 4.0, cols[1]: 6.0},
+            ]
+        )
+        dim_metas = OrderedDict([("SPC_AVG", meta)])
+
+        fig = build_combined_chart(
+            df=df,
+            dim_metas=dim_metas,
+            dim_nos=["SPC_AVG"],
+            section_by_fields=[],
+            y_axis_mode="Deviation from Nominal",
+            custom_yrange=None,
+            show_average_line=True,
+            **common_kwargs,
+        )
+
+        avg_trace = [t for t in fig.data if t.name == "Average"][0]
+        assert list(avg_trace.y) == [2.0, 4.0]
+
 
 # ---------------------------------------------------------------------------
 # 4. Combined Profile — single-point (flatness fix)
@@ -376,7 +431,83 @@ class TestHistogram:
 
 
 # ---------------------------------------------------------------------------
-# 8. Batch Export — figure building pipeline
+# 8. Range Envelope
+# ---------------------------------------------------------------------------
+
+
+class TestRangeEnvelope:
+    def test_returns_figure(self, multi_point_data, common_kwargs):
+        df, dim_metas = multi_point_data
+        fig = build_range_envelope_chart(
+            df=df,
+            dim_metas=dim_metas,
+            dim_nos=["SPC_HG"],
+            section_by_fields=["Factory"],
+            y_axis_mode="Measurement values",
+            custom_yrange=None,
+            **common_kwargs,
+        )
+        assert fig is not None
+
+    def test_has_min_band_and_mean_traces(self, multi_point_data, common_kwargs):
+        df, dim_metas = multi_point_data
+        fig = build_range_envelope_chart(
+            df=df,
+            dim_metas=dim_metas,
+            dim_nos=["SPC_HG"],
+            section_by_fields=["Factory"],
+            y_axis_mode="Measurement values",
+            custom_yrange=None,
+            **common_kwargs,
+        )
+
+        assert fig is not None
+        assert len(fig.data) >= 3
+        assert any(trace.fill == "tonexty" for trace in fig.data)
+        assert any(trace.mode == "lines+markers" for trace in fig.data)
+
+    def test_color_by_factory_creates_one_mean_line_per_factory(self, multi_point_data):
+        df, dim_metas = multi_point_data
+        fig = build_range_envelope_chart(
+            df=df,
+            dim_metas=dim_metas,
+            dim_nos=["SPC_HG"],
+            section_by_fields=[],
+            color_by="Factory",
+            y_axis_mode="Measurement values",
+            exclude_intervals=False,
+            group_label="Test",
+            row_by="None",
+            custom_color_map=None,
+            custom_yrange=None,
+            selected_points=None,
+        )
+
+        mean_traces = [trace for trace in fig.data if trace.mode == "lines+markers"]
+        assert sorted(trace.name for trace in mean_traces) == ["FJS", "LYC"]
+
+    def test_level_sections_sort_pp_before_ap_even_when_data_has_ap_first(self, common_kwargs):
+        cols, meta = _make_dim_meta("SPC_X1", "Flatness", 2, nominal=0.0, usl=0.5, lsl=0.0)
+        df = pd.DataFrame({cols[0]: [10.0, 20.0], cols[1]: [11.0, 21.0]})
+        df["Level"] = ["AP", "PP"]
+
+        fig = build_range_envelope_chart(
+            df=df,
+            dim_metas=OrderedDict([("SPC_X1", meta)]),
+            dim_nos=["SPC_X1"],
+            section_by_fields=["Level"],
+            y_axis_mode="Measurement values",
+            custom_yrange=None,
+            **common_kwargs,
+        )
+
+        mean_traces = [trace for trace in fig.data if trace.mode == "lines+markers"]
+        assert list(mean_traces[0].y) == [20.0, 21.0]
+        assert list(mean_traces[1].y) == [10.0, 11.0]
+
+
+# ---------------------------------------------------------------------------
+# 9. Batch Export — figure building pipeline
 # ---------------------------------------------------------------------------
 
 
@@ -431,6 +562,32 @@ class TestBatchExport:
             None,
         )
         assert fig is not None
+
+    def test_build_chart_figure_range_envelope(self, multi_point_data, common_kwargs):
+        from spc_viz.ui import ChartControls, _build_chart_figure
+
+        df, dim_metas = multi_point_data
+        controls = ChartControls(
+            chart_type="Range Envelope",
+            color_by="None",
+            row_by="None",
+            section_by_fields=["Factory"],
+            y_axis_mode="Measurement values",
+            custom_yrange=None,
+            hist_nbins=30,
+        )
+        fig = _build_chart_figure(
+            df,
+            dim_metas,
+            ["SPC_HG"],
+            controls,
+            {},
+            False,
+            "Test",
+            None,
+        )
+        assert fig is not None
+        assert any(trace.fill == "tonexty" for trace in fig.data)
 
     def test_figure_to_image(self, multi_point_data, common_kwargs):
         """Verify kaleido can convert a figure to PNG bytes."""
@@ -551,7 +708,85 @@ class TestFactoryDetection:
 
 
 # ---------------------------------------------------------------------------
-# 11. compute_sections
+# 11. Cross-sheet dimension pairing
+# ---------------------------------------------------------------------------
+
+
+def _paired_meta(dim_no, desc, points, usl, lsl):
+    cols = [f"{dim_no}_{point}" for point in points]
+    return DimensionMeta(
+        dim_no=dim_no,
+        description=desc,
+        dim_type="Measurement Point Data",
+        point_numbers=list(points),
+        nominal=[0.0] * len(points),
+        tol_max=[usl] * len(points),
+        tol_min=[abs(lsl)] * len(points),
+        usl=[usl] * len(points),
+        lsl=[lsl] * len(points),
+        col_indices=list(range(1, len(points) + 1)),
+        col_labels=cols,
+    )
+
+
+def _paired_pf(sheet_name, dim_no, desc, points, values, usl, lsl):
+    meta = _paired_meta(dim_no, desc, points, usl, lsl)
+    data = pd.DataFrame(values, columns=meta.col_labels)
+    data["CFG"] = ["A"] * len(data)
+    return {
+        "filename": "pairing_fixture.xlsx",
+        "sheet_name": sheet_name,
+        "part_number": None,
+        "part_description": None,
+        "revision": None,
+        "factory": None,
+        "dimensions": OrderedDict([(dim_no, meta)]),
+        "data": data,
+        "meta_columns": ["CFG"],
+    }
+
+
+class TestCrossSheetDimensionPairing:
+    def test_builds_simple_paired_feature_from_different_spc_bubbles(self):
+        points = ["C51", "C52", "C53"]
+        parsed_files = [
+            _paired_pf("PP Data Input POR", "SPC_AR", "Front edge straightness", points, [[1, 2, 3]], 0.1, -0.3),
+            _paired_pf("AP Data Input POR", "SPC_AT", "Front Edge Straightness", points, [[4, 5, 6]], 0.4, -0.4),
+        ]
+
+        dimensions = build_paired_dimension_map(parsed_files)
+
+        assert list(dimensions.keys())[0].startswith("PAIR::front-edge-straightness")
+        assert list(dimensions.keys()) == [list(dimensions.keys())[0]]
+        paired_meta = next(iter(dimensions.values()))
+        assert paired_meta.description == "Front edge straightness"
+        assert paired_meta.point_numbers == points
+        assert paired_meta.usl == [0.4, 0.4, 0.4]
+        assert paired_meta.lsl == [-0.4, -0.4, -0.4]
+
+    def test_prepare_combined_data_stacks_paired_dimensions_by_point_sequence(self):
+        points = ["C51", "C52", "C53"]
+        parsed_files = [
+            _paired_pf("PP Data Input POR", "SPC_AR", "Front edge straightness", points, [[1, 2, 3], [2, 3, 4]], 0.1, -0.3),
+            _paired_pf("AP Data Input POR", "SPC_AT", "Front Edge Straightness", points, [[4, 5, 6], [5, 6, 7]], 0.4, -0.4),
+        ]
+        dimensions = build_paired_dimension_map(parsed_files)
+        pair_id = next(iter(dimensions.keys()))
+
+        df, dim_metas = prepare_combined_data(parsed_files, [pair_id])
+
+        assert df is not None
+        assert dim_metas is not None
+        paired_cols = dim_metas[pair_id].col_labels
+        assert list(df[paired_cols].iloc[0]) == [1, 2, 3]
+        assert list(df[paired_cols].iloc[2]) == [4, 5, 6]
+        assert set(df["Source Level"]) == {"PP", "AP"}
+        assert set(df["Source Condition"]) == {"POR"}
+        assert set(df["Original Dimension"]) == {"SPC_AR", "SPC_AT"}
+
+
+# ---------------------------------------------------------------------------
+# 12. compute_sections
 # ---------------------------------------------------------------------------
 
 from spc_viz.charts.base import (
@@ -559,6 +794,7 @@ from spc_viz.charts.base import (
     compute_row_groups,
     compute_sections,
     get_color_for_group,
+    prepare_combined_data,
 )
 
 
@@ -690,7 +926,7 @@ class TestChartControls:
         assert _controls() == _controls()
 
     def test_chart_type_literal_values(self):
-        for ct in ("Combined Profile", "Box Plot", "Histogram"):
+        for ct in ("Combined Profile", "Box Plot", "Histogram", "Range Envelope"):
             assert _controls(chart_type=ct).chart_type == ct
 
 
@@ -961,6 +1197,29 @@ class TestNestedSectionHeaders:
         for lot in ["H04A005C26", "H04A006C26", "H07A004C26", "F25V001C26"]:
             assert f"<b>{lot}</b>" in annotation_text
 
+    def test_level_sections_sort_pp_before_ap_even_when_data_has_ap_first(self, common_kwargs):
+        cols, meta = _make_dim_meta("SPC_X1", "Flatness", 1, nominal=0.0, usl=0.5, lsl=0.0)
+        df = pd.DataFrame({cols[0]: np.random.uniform(0.0, 0.4, 16)})
+        df["Level"] = ["AP"] * 8 + ["PP"] * 8
+        df["CFG111"] = ["POR:-0.1/+0.15"] * 4 + ["POR:0.15-0.25"] * 4 + ["POR:-0.1/+0.15"] * 4 + ["POR:0.15-0.25"] * 4
+
+        fig = build_combined_chart(
+            df=df,
+            dim_metas=OrderedDict([("SPC_X1", meta)]),
+            dim_nos=["SPC_X1"],
+            section_by_fields=["Level", "CFG111"],
+            y_axis_mode="Measurement values",
+            custom_yrange=None,
+            **common_kwargs,
+        )
+
+        level_annotations = [
+            ann for ann in fig.layout.annotations or [] if ann.text in {"<b>PP</b>", "<b>AP</b>"}
+        ]
+        assert len(level_annotations) == 2
+        positions = {ann.text: ann.x for ann in level_annotations}
+        assert positions["<b>PP</b>"] < positions["<b>AP</b>"]
+
     def test_three_section_fields_render_all_header_levels(self, common_kwargs):
         cols, meta = _make_dim_meta("SPC_X1", "Flatness", 1, nominal=0.0, usl=0.5, lsl=0.0)
         df = pd.DataFrame({cols[0]: np.random.uniform(0.0, 0.4, 16)})
@@ -991,3 +1250,72 @@ class TestNestedSectionHeaders:
         ]
         assert len(header_shapes) >= 6
         assert fig.layout.margin.t >= 105 + 34 * 3
+
+
+class TestDataFilters:
+    """Row-level metadata filtering applied before charting."""
+
+    def _df(self):
+        return pd.DataFrame(
+            {
+                "CFG": ["QIB0", "QIB0", "QIB1", "POR", None],
+                "Level": ["AP", "PP", "AP", "AP", "AP"],
+                "val": [1.0, 2.0, 3.0, 4.0, 5.0],
+            }
+        )
+
+    def test_no_filters_returns_unchanged(self):
+        from spc_viz.ui.filters import apply_data_filters
+
+        df = self._df()
+        out = apply_data_filters(df, {})
+        assert len(out) == len(df)
+
+    def test_single_field_filter(self):
+        from spc_viz.ui.filters import apply_data_filters
+
+        out = apply_data_filters(self._df(), {"CFG": ["QIB0", "QIB1"]})
+        assert sorted(out["CFG"].tolist()) == ["QIB0", "QIB0", "QIB1"]
+        assert len(out) == 3
+
+    def test_multi_field_filter_is_anded(self):
+        from spc_viz.ui.filters import apply_data_filters
+
+        out = apply_data_filters(self._df(), {"CFG": ["QIB0", "QIB1"], "Level": ["AP"]})
+        # QIB0/AP (row0) and QIB1/AP (row2) survive; QIB0/PP (row1) dropped.
+        assert len(out) == 2
+        assert set(out["Level"]) == {"AP"}
+
+    def test_nan_maps_to_unknown(self):
+        from spc_viz.ui.filters import apply_data_filters
+
+        out = apply_data_filters(self._df(), {"CFG": ["Unknown"]})
+        assert len(out) == 1
+        assert out["val"].iloc[0] == 5.0
+
+    def test_empty_selection_is_ignored(self):
+        from spc_viz.ui.filters import apply_data_filters
+
+        # An active field with an empty allowed-list is a no-op, not a wipe.
+        out = apply_data_filters(self._df(), {"CFG": []})
+        assert len(out) == 5
+
+    def test_index_is_reset(self):
+        from spc_viz.ui.filters import apply_data_filters
+
+        out = apply_data_filters(self._df(), {"CFG": ["QIB1"]})
+        assert list(out.index) == list(range(len(out)))
+
+    def test_filterable_fields_skips_constant_and_identity_columns(self):
+        from spc_viz.ui.filters import _filterable_fields
+
+        df = pd.DataFrame(
+            {
+                "CFG": ["A", "B"],          # multi-value -> filterable
+                "Factory": ["FX", "FX"],     # constant -> skipped
+                "SN": ["s1", "s2"],          # identity -> skipped
+                "val": [1.0, 2.0],
+            }
+        )
+        parsed = [{"meta_columns": ["CFG", "Factory", "SN"]}]
+        assert _filterable_fields(parsed, df) == ["CFG"]

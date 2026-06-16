@@ -14,17 +14,16 @@ Chart model (combined profile view):
   Sections = Factory x Build (e.g. FX P1, FX P2, TRM P1, TRM P2)
 """
 
-from collections import OrderedDict
-
 import streamlit as st
 import streamlit.components.v1 as components
 
-from spc_viz.parsers import _open_workbook, parse_excel_multi
+from spc_viz.parsers import _open_workbook, build_paired_dimension_map, parse_excel_multi
 from spc_viz.theme import inject_theme
 from spc_viz.ui import (
     build_and_render_chart,
     build_chart_controls,
     build_color_pickers,
+    build_data_filters,
     build_dimension_selector,
     build_point_filter,
     prepare_and_clean,
@@ -241,13 +240,9 @@ with st.sidebar.expander(f"Loaded Files ({len(parsed_files)})", expanded=False):
         )
 
 # ---------------------------------------------------------------------------
-# Build unified dimension map
+# Build unified dimension map, pairing PP/AP bubbles that share feature + points
 # ---------------------------------------------------------------------------
-all_dimensions = OrderedDict()
-for pf in parsed_files:
-    for dno, dmeta in pf["dimensions"].items():
-        if dno not in all_dimensions:
-            all_dimensions[dno] = dmeta
+all_dimensions = build_paired_dimension_map(parsed_files)
 
 # ---------------------------------------------------------------------------
 # Shared controls (dimension selection, chart type, grouping, etc.)
@@ -266,6 +261,7 @@ controls = build_chart_controls(parsed_files, key_prefix=KP)
 st.title("SPC Data Visualization")
 
 df_clean, dim_metas, _ = prepare_and_clean(parsed_files, selected_dim_nos)
+df_clean, active_filters = build_data_filters(parsed_files, df_clean, key_prefix=KP)
 
 custom_color_map = build_color_pickers(df_clean, controls.color_by, key_prefix=KP)
 
@@ -349,4 +345,5 @@ render_batch_export(
     selected_points,
     custom_color_map,
     key_prefix=KP,
+    data_filters=active_filters,
 )

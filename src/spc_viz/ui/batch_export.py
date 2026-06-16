@@ -7,8 +7,10 @@ from collections import OrderedDict
 import streamlit as st
 
 from spc_viz.parsers.dimensions import DimensionMeta
+from spc_viz.parsers.pairing import is_paired_dim_id
 
 from .chart_view import _build_chart_figure
+from .filters import apply_data_filters
 from .state import ChartControls, prepare_and_clean
 
 
@@ -20,8 +22,14 @@ def render_batch_export(
     selected_points: list[str] | None,
     custom_color_map: dict[str, str],
     key_prefix: str = "",
+    data_filters: dict[str, list[str]] | None = None,
 ) -> None:
-    """Sidebar expander that batch-exports one chart per selected dimension."""
+    """Sidebar expander that batch-exports one chart per selected dimension.
+
+    ``data_filters`` is the active sidebar filter spec; when provided, each
+    exported chart is narrowed to the same factor values as the on-screen
+    chart so the ZIP matches what the user is looking at.
+    """
     import io
     import re
     import zipfile
@@ -30,7 +38,10 @@ def render_batch_export(
 
     dim_display_map: OrderedDict[str, str] = OrderedDict()
     for dno, dmeta in all_dimensions.items():
-        label = f"{dno} — {dmeta.description}" if dmeta.description else dno
+        if is_paired_dim_id(dno):
+            label = dmeta.description or dno
+        else:
+            label = f"{dno} — {dmeta.description}" if dmeta.description else dno
         dim_display_map[label] = dno
 
     with st.sidebar.expander("Batch Chart Export", expanded=False):
@@ -73,12 +84,19 @@ def render_batch_export(
                 skipped.append(dno)
                 continue
 
+            # Apply the same sidebar filter the on-screen chart uses.
+            if data_filters:
+                df_clean = apply_data_filters(df_clean, data_filters)
+
             if df_clean is None or df_clean.empty:
                 skipped.append(dno)
                 continue
 
             desc = all_dimensions[dno].description or ""
-            group_label = f"{dno.replace('SPC_', '')} — {desc}" if desc else dno
+            if is_paired_dim_id(dno):
+                group_label = desc or dno
+            else:
+                group_label = f"{dno.replace('SPC_', '')} — {desc}" if desc else dno
 
             fig = _build_chart_figure(
                 df_clean,
@@ -106,11 +124,12 @@ def render_batch_export(
                 skipped.append(f"{dno} (image error: {e})")
                 continue
 
+            safe_dno = re.sub(r"[^\w\s-]", "", dno.replace("SPC_", "")).strip().replace(" ", "_")
             safe_desc = re.sub(r"[^\w\s-]", "", desc).strip().replace(" ", "_")
             fname = (
-                f"{ct.replace(' ', '_')}_{dno}_{safe_desc}.png"
+                f"{ct.replace(' ', '_')}_{safe_dno}_{safe_desc}.png"
                 if safe_desc
-                else f"{ct.replace(' ', '_')}_{dno}.png"
+                else f"{ct.replace(' ', '_')}_{safe_dno}.png"
             )
             images.append((fname, png_bytes))
 

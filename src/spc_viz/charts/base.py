@@ -15,6 +15,11 @@ import numpy as np
 import pandas as pd
 from scipy import stats as scipy_stats
 
+from spc_viz.parsers.pairing import (
+    SOURCE_META_COLUMNS,
+    is_paired_dim_id,
+)
+
 # ---------------------------------------------------------------------------
 # Color palettes (no purple)
 # ---------------------------------------------------------------------------
@@ -37,6 +42,72 @@ MAX_TRACES_PER_GROUP: int = 600
 def get_color_for_group(idx: int) -> str:
     """Return a hex color string for a given group index (cycles through palette)."""
     return COLOR_PALETTE[idx % len(COLOR_PALETTE)]
+
+
+def _natural_sort_key(value: str) -> tuple:
+    parts = re.split(r"(\d+(?:\.\d+)?)", str(value).lower())
+    key: list[tuple[int, object]] = []
+    for part in parts:
+        if not part:
+            continue
+        try:
+            key.append((0, float(part)))
+        except ValueError:
+            key.append((1, part))
+    return tuple(key)
+
+
+def _section_value_sort_key(field_name: str, value: str) -> tuple:
+    field = str(field_name or "").strip().lower()
+    text = str(value or "").strip()
+    upper = text.upper()
+
+    if field in {"level", "source level"} or upper in {"PP", "AP"}:
+        level_order = {"PP": 0, "AP": 1}
+        if upper in level_order:
+            return (0, level_order[upper], upper)
+
+    if field in {"source sheet", "sheet"}:
+        if re.search(r"(^|[^A-Z])PP([^A-Z]|$)", upper):
+            return (0, 0, upper)
+        if re.search(r"(^|[^A-Z])AP([^A-Z]|$)", upper):
+            return (0, 1, upper)
+
+    if field in {"source condition", "condition"}:
+        if "POR" in upper:
+            return (0, 0, upper)
+        if "CORR" in upper:
+            return (0, 1, upper)
+
+    return (1, _natural_sort_key(text))
+
+
+def section_sort_key(
+    section_by_fields: list[str],
+    section_parts: tuple[str, ...],
+) -> tuple:
+    """Return a stable sort key for section labels.
+
+    Domain-specific order currently puts PP before AP, then POR before CORR.
+    Other values fall back to natural sorting.
+    """
+    return tuple(
+        _section_value_sort_key(field, value)
+        for field, value in zip(section_by_fields, section_parts)
+    )
+
+
+def has_domain_section_order(
+    section_by_fields: list[str],
+    section_parts_values,
+) -> bool:
+    """Whether a section set contains PP/AP or POR/CORR ordering semantics."""
+    for parts in section_parts_values:
+        for field, value in zip(section_by_fields, parts):
+            sort_key = _section_value_sort_key(field, value)
+            if sort_key and sort_key[0] == 0:
+                return True
+    return False
 
 
 # ---------------------------------------------------------------------------
@@ -71,6 +142,42 @@ def _find_matching_dim(pf_dims: OrderedDict, target_dno: str) -> str | None:
     return None
 
 
+def _resolve_dimension_for_file(pf: dict, target_dno: str) -> str | None:
+    """Resolve a selected dimension to the local dimension in one parsed file."""
+    if is_paired_dim_id(target_dno):
+        pair_info = pf.get("_paired_dimensions", {}).get(target_dno)
+        if pair_info:
+            return pair_info.get("local_dim_no")
+        return None
+    return _find_matching_dim(pf["dimensions"], target_dno)
+
+
+def _canonical_meta_for_target(pf: dict, target_dno: str, local_dno: str) -> object:
+    if is_paired_dim_id(target_dno):
+        pair_info = pf.get("_paired_dimensions", {}).get(target_dno)
+        if pair_info and pair_info.get("meta") is not None:
+            return pair_info["meta"]
+    return pf["dimensions"][local_dno]
+
+
+def _source_level(sheet_name: str) -> str:
+    text = f" {str(sheet_name).upper()} "
+    if re.search(r"(^|[^A-Z])PP([^A-Z]|$)", text):
+        return "PP"
+    if re.search(r"(^|[^A-Z])AP([^A-Z]|$)", text):
+        return "AP"
+    return "Unknown"
+
+
+def _source_condition(sheet_name: str) -> str:
+    text = str(sheet_name).upper()
+    if "CORR" in text:
+        return "CORR"
+    if "POR" in text:
+        return "POR"
+    return "Unknown"
+
+
 def prepare_combined_data(
     parsed_files: list[dict],
     dim_nos: list[str],
@@ -89,29 +196,38 @@ def prepare_combined_data(
     for pf in parsed_files:
         for dno in dim_nos:
             if dno not in dim_metas:
-                match = _find_matching_dim(pf["dimensions"], dno)
+                match = _resolve_dimension_for_file(pf, dno)
                 if match:
-                    dim_metas[dno] = pf["dimensions"][match]
+                    dim_metas[dno] = _canonical_meta_for_target(pf, dno, match)
 
     for pf in parsed_files:
         factory = _get_factory(pf)
         df = pf["data"].copy()
         df["_factory"] = factory
         df["_source_file"] = pf["filename"]
+        sheet_name = pf.get("sheet_name") or "Unknown"
+        df["Source Sheet"] = sheet_name
+        df["Source Level"] = _source_level(sheet_name)
+        df["Source Condition"] = _source_condition(sheet_name)
 
         meta_cols = [c for c in pf["meta_columns"] if c in df.columns]
+        for col in SOURCE_META_COLUMNS:
+            if col != "Original Dimension" and col in df.columns and col not in meta_cols:
+                meta_cols.append(col)
         meas_cols: list[str] = []
         rename_map: dict[str, str] = {}
+        resolved_dim_names: list[str] = []
 
         for dno in dim_nos:
-            match = _find_matching_dim(pf["dimensions"], dno)
+            match = _resolve_dimension_for_file(pf, dno)
             if match is None:
                 continue
+            resolved_dim_names.append(match)
 
             local_meta = pf["dimensions"][match]
             canonical_meta = dim_metas.get(dno)
 
-            if canonical_meta and match != dno:
+            if canonical_meta and (match != dno or is_paired_dim_id(dno)):
                 # Rename local columns to canonical names so they align
                 for local_label, canon_label in zip(
                     local_meta.col_labels, canonical_meta.col_labels
@@ -132,6 +248,9 @@ def prepare_combined_data(
         meas_cols = meas_cols_dedup
 
         keep = meta_cols + meas_cols + ["_factory", "_source_file"]
+        if resolved_dim_names:
+            df["Original Dimension"] = " / ".join(dict.fromkeys(resolved_dim_names))
+            keep.append("Original Dimension")
         keep = [c for c in keep if c in df.columns]
         df = df[keep]
 

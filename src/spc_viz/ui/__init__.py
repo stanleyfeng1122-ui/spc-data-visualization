@@ -11,6 +11,7 @@ spc_viz._deferred.analysis until a future release re-wires them.
 from .batch_export import render_batch_export
 from .chart_view import _build_chart_figure, build_and_render_chart
 from .dimension_picker import build_dimension_selector, build_point_filter
+from .filters import apply_data_filters, build_data_filters
 from .sidebar import (
     SECTION_FIELDS,
     build_chart_controls,
@@ -22,9 +23,11 @@ __all__ = [
     "ChartControls",
     "SECTION_FIELDS",
     "_build_chart_figure",
+    "apply_data_filters",
     "build_and_render_chart",
     "build_chart_controls",
     "build_color_pickers",
+    "build_data_filters",
     "build_dimension_selector",
     "build_point_filter",
     "prepare_and_clean",

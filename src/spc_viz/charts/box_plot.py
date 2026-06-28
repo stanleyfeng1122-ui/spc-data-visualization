@@ -17,7 +17,7 @@ from plotly.subplots import make_subplots
 from spc_viz.parsers import get_filtered_dim_meta
 from spc_viz.parsers.dimensions import DimensionMeta
 
-from .base import compute_row_groups, get_color_for_group
+from .base import compute_row_groups, compute_sections, get_color_for_group
 
 # ---------------------------------------------------------------------------
 # Chart building -- box plot
@@ -36,8 +36,15 @@ def build_box_plot(
     custom_color_map: dict[str, str] | None = None,
     custom_yrange: list[float] | None = None,
     selected_points: list[str] | None = None,
+    section_by_fields: list[str] | None = None,
 ) -> Figure | None:
-    """Build a box plot showing the distribution of measurements at each point."""
+    """Build a box plot showing the distribution of measurements at each point.
+
+    Each box overlays all of its data points (jittered) so the sample size is
+    visible. ``section_by_fields`` splits the boxes along the x-axis by metadata
+    value (e.g. one box per Factory), composing with ``color_by`` (grouped
+    boxes at each x) and ``row_by`` (vertical facets).
+    """
     deviation_mode = y_axis_mode == "Deviation from Nominal"
 
     # Normalise selected_points to a set for O(1) lookup; None/empty means show all
@@ -47,6 +54,16 @@ def build_box_plot(
     unique_rows = list(dict.fromkeys(row_labels))
     n_rows = len(unique_rows)
     use_row_facets = n_rows > 1
+
+    # Section labels go on the x-axis (None sentinel = no sectioning).
+    section_series: pd.Series | None
+    if section_by_fields:
+        sec = compute_sections(df, section_by_fields)
+        section_series = sec
+        unique_sections: list = sorted(sec.unique())
+    else:
+        section_series = None
+        unique_sections = [None]
 
     if color_by != "None" and color_by in df.columns:
         color_series = df[color_by].fillna("Unknown").astype(str)
@@ -78,56 +95,78 @@ def build_box_plot(
     multi_dim = len(dim_nos) > 1
     rep_usl, rep_lsl, rep_nom = None, None, None
 
+    # Valid (col, point, spec) tuples per dim are row-independent — compute once.
+    dim_valids: OrderedDict[str, list] = OrderedDict()
+    for dno in dim_nos:
+        if dno not in dim_metas:
+            continue
+        col_labels, point_nums, nominals, usls, lsls = get_filtered_dim_meta(
+            dim_metas[dno], exclude_intervals=exclude_intervals
+        )
+        valid = [
+            (cl, pn, n, u, l)
+            for cl, pn, n, u, l in zip(col_labels, point_nums, nominals, usls, lsls)
+            if cl in df.columns and (_point_filter is None or pn in _point_filter)
+        ]
+        if valid:
+            dim_valids[dno] = valid
+    # One measurement point overall -> the section value alone is the x label.
+    single_point = sum(len(v) for v in dim_valids.values()) <= 1
+
     for row_idx, row_label in enumerate(unique_rows):
         plotly_row = row_idx + 1 if use_row_facets else None
         row_mask = row_labels == row_label
         row_df = df[row_mask]
         row_colors = color_series[row_mask]
+        row_sections = section_series[row_mask] if section_series is not None else None
 
-        for dno in dim_nos:
-            if dno not in dim_metas:
-                continue
-            dmeta = dim_metas[dno]
-            col_labels, point_nums, nominals, usls, lsls = get_filtered_dim_meta(
-                dmeta, exclude_intervals=exclude_intervals
-            )
-            valid = [
-                (cl, pn, n, u, l)
-                for cl, pn, n, u, l in zip(col_labels, point_nums, nominals, usls, lsls)
-                if cl in df.columns and (_point_filter is None or pn in _point_filter)
-            ]
-            if not valid:
-                continue
-
+        for dno, valid in dim_valids.items():
             for col_label, point_num, nominal, usl_val, lsl_val in valid:
-                x_label = f"{dno}_{point_num}" if multi_dim else point_num
+                base_point = f"{dno}_{point_num}" if multi_dim else point_num
                 if rep_usl is None and usl_val is not None:
                     rep_usl, rep_lsl, rep_nom = usl_val, lsl_val, nominal
 
-                for grp_name in unique_colors:
-                    grp_mask = row_colors == grp_name
-                    values = pd.to_numeric(
-                        row_df.loc[grp_mask, col_label], errors="coerce"
-                    ).dropna()
-                    if deviation_mode and nominal is not None:
-                        values = values - nominal
-
-                    show_legend = grp_name not in legend_shown
-                    legend_shown.add(grp_name)
-
-                    trace = go.Box(
-                        y=values,
-                        x=[x_label] * len(values),
-                        name=grp_name,
-                        legendgroup=grp_name,
-                        marker_color=color_map[grp_name],
-                        showlegend=show_legend,
-                        boxpoints="outliers",
-                    )
-                    if use_row_facets:
-                        fig.add_trace(trace, row=plotly_row, col=1)
+                for sec_value in unique_sections:
+                    if sec_value is None:
+                        x_label, sec_mask = base_point, None
+                    elif single_point:
+                        x_label, sec_mask = str(sec_value), (row_sections == sec_value)
                     else:
-                        fig.add_trace(trace)
+                        x_label = f"{sec_value} · {base_point}"
+                        sec_mask = row_sections == sec_value
+
+                    for grp_name in unique_colors:
+                        grp_mask = row_colors == grp_name
+                        if sec_mask is not None:
+                            grp_mask = grp_mask & sec_mask
+                        values = pd.to_numeric(
+                            row_df.loc[grp_mask, col_label], errors="coerce"
+                        ).dropna()
+                        if deviation_mode and nominal is not None:
+                            values = values - nominal
+                        if len(values) == 0:
+                            continue
+
+                        show_legend = grp_name not in legend_shown
+                        legend_shown.add(grp_name)
+
+                        color = color_map[grp_name]
+                        trace = go.Box(
+                            y=values,
+                            x=[x_label] * len(values),
+                            name=grp_name,
+                            legendgroup=grp_name,
+                            showlegend=show_legend,
+                            boxpoints="all",
+                            jitter=0.5,
+                            pointpos=0,
+                            marker=dict(color=color, size=3, opacity=0.4),
+                            line=dict(color=color, width=1.2),
+                        )
+                        if use_row_facets:
+                            fig.add_trace(trace, row=plotly_row, col=1)
+                        else:
+                            fig.add_trace(trace)
 
     dash_style = dict(dash="dash", width=1.2)
     row_kwargs_list = [dict(row=i + 1, col=1) for i in range(n_rows)] if use_row_facets else [{}]
@@ -184,13 +223,16 @@ def build_box_plot(
 
     chart_height = 350 * n_rows if use_row_facets else 620
     y_range_kwargs = dict(range=custom_yrange) if custom_yrange else {}
+    x_title = (
+        " / ".join(section_by_fields)
+        if (section_by_fields and single_point)
+        else "Measurement Point"
+    )
     fig.update_layout(
         title=dict(
             text=f"<b>Box Plot: {group_label}</b>", font=dict(size=15), x=0.5, xanchor="center"
         ),
-        xaxis=dict(
-            title="Measurement Point", tickangle=-45, tickfont=dict(size=8, color="#000000")
-        ),
+        xaxis=dict(title=x_title, tickangle=-45, tickfont=dict(size=8, color="#000000")),
         yaxis=dict(title="Deviation from Nominal" if deviation_mode else "Value", **y_range_kwargs),
         boxmode="group",
         height=chart_height,

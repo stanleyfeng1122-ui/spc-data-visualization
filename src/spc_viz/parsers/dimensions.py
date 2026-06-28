@@ -36,6 +36,7 @@ class DimensionMeta:
     lsl: list  # lower spec limit per sub-column
     col_indices: list  # 1-based column indices in the sheet
     col_labels: list  # readable column labels for the dataframe
+    source_dim_nos: list | None = None  # for paired dims: the source SPC bubble ids
 
 
 @dataclass

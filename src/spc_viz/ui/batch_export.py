@@ -10,6 +10,7 @@ from spc_viz.parsers.dimensions import DimensionMeta
 from spc_viz.parsers.pairing import is_paired_dim_id
 
 from .chart_view import _build_chart_figure
+from .dimension_picker import build_display_map
 from .filters import apply_data_filters
 from .state import ChartControls, prepare_and_clean
 
@@ -36,13 +37,9 @@ def render_batch_export(
 
     from streamlit.runtime.scriptrunner import StopException
 
-    dim_display_map: OrderedDict[str, str] = OrderedDict()
-    for dno, dmeta in all_dimensions.items():
-        if is_paired_dim_id(dno):
-            label = dmeta.description or dno
-        else:
-            label = f"{dno} — {dmeta.description}" if dmeta.description else dno
-        dim_display_map[label] = dno
+    dim_display_map: OrderedDict[str, str] = OrderedDict(
+        (label, dno) for dno, label in build_display_map(all_dimensions).items()
+    )
 
     with st.sidebar.expander("Batch Chart Export", expanded=False):
         batch_dims: list[str] = st.multiselect(

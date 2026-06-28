@@ -65,6 +65,7 @@ def _build_chart_figure(
     elif ct == "Box Plot":
         fig = build_box_plot(
             **common,
+            section_by_fields=controls.section_by_fields,
             y_axis_mode=controls.y_axis_mode,
             custom_yrange=controls.custom_yrange,
         )

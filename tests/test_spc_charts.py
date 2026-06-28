@@ -399,6 +399,36 @@ class TestBoxPlot:
         box_traces = [t for t in fig.data if t.type == "box"]
         assert len(box_traces) > 0, "No box traces in Box Plot"
 
+    def test_overlays_all_data_points(self, multi_point_data, common_kwargs):
+        df, dim_metas = multi_point_data
+        fig = build_box_plot(
+            df=df,
+            dim_metas=dim_metas,
+            dim_nos=["SPC_HG"],
+            y_axis_mode="Measurement values",
+            custom_yrange=None,
+            **common_kwargs,
+        )
+        box = [t for t in fig.data if t.type == "box"][0]
+        assert box.boxpoints == "all", "Box plot should overlay all data points"
+
+    def test_section_by_splits_boxes(self, multi_point_data, common_kwargs):
+        # multi_point_data has a Factory column (FJS / LYC).
+        df, dim_metas = multi_point_data
+        fig = build_box_plot(
+            df=df,
+            dim_metas=dim_metas,
+            dim_nos=["SPC_HG"],
+            y_axis_mode="Measurement values",
+            custom_yrange=None,
+            section_by_fields=["Factory"],
+            **common_kwargs,
+        )
+        xs = {str(t.x[0]) for t in fig.data if t.type == "box"}
+        assert any("FJS" in x for x in xs) and any("LYC" in x for x in xs), (
+            f"Section-by Factory should split boxes by factory; got {xs}"
+        )
+
 
 # ---------------------------------------------------------------------------
 # 7. Histogram
@@ -1319,3 +1349,93 @@ class TestDataFilters:
         )
         parsed = [{"meta_columns": ["CFG", "Factory", "SN"]}]
         assert _filterable_fields(parsed, df) == ["CFG"]
+
+
+class TestBubbleIdReuse:
+    """A bubble-id reused for a second feature must not contaminate the first."""
+
+    def test_foreign_description_column_is_dropped(self):
+        from spc_viz.parsers.measurements import merge_dimension_groups
+
+        # SPC_X reused: cols 1-3 = "Left Edge Straightness" (C1-C3), col 9 = a
+        # stray "Inner Dome Flatness" column with a blank point cell.
+        col_dim_no = {1: "SPC_X", 2: "SPC_X", 3: "SPC_X", 9: "SPC_X"}
+        col_desc = {
+            1: "Left Edge Straightness",
+            2: "Left Edge Straightness",
+            3: "Left Edge Straightness",
+            9: "Inner Dome Flatness",
+        }
+        col_point = {1: "C1", 2: "C2", 3: "C3", 9: ""}
+        empty: dict = {}
+        dims = merge_dimension_groups(
+            col_dim_no, col_desc, empty, col_point, empty, empty, empty, empty, empty
+        )
+
+        assert list(dims.keys()) == ["SPC_X"]
+        meta = dims["SPC_X"]
+        # Only the 3 real straightness points — no synthetic phantom for col 9.
+        assert meta.point_numbers == ["C1", "C2", "C3"]
+        assert all(not p.startswith("P") for p in meta.point_numbers)
+
+    def test_blank_descriptions_are_kept(self):
+        # Compact-format sub-columns carry blank descriptions and must survive.
+        from spc_viz.parsers.measurements import merge_dimension_groups
+
+        col_dim_no = {1: "SPC_Y", 2: "SPC_Y", 3: "SPC_Y"}
+        col_desc = {1: "Height", 2: "", 3: ""}
+        col_point = {1: "C1", 2: "C2", 3: "C3"}
+        empty: dict = {}
+        dims = merge_dimension_groups(
+            col_dim_no, col_desc, empty, col_point, empty, empty, empty, empty, empty
+        )
+        assert dims["SPC_Y"].point_numbers == ["C1", "C2", "C3"]
+
+
+class TestDisplayMapDisambiguation:
+    """Two different dimensions sharing a description stay separately selectable."""
+
+    def _meta(self, dno, desc, points, source_dim_nos=None):
+        return DimensionMeta(
+            dim_no=dno, description=desc, dim_type="", point_numbers=points,
+            nominal=[], tol_max=[], tol_min=[], usl=[], lsl=[],
+            col_indices=[], col_labels=[], source_dim_nos=source_dim_nos,
+        )
+
+    def test_no_collision_keeps_clean_label(self):
+        from spc_viz.ui.dimension_picker import build_display_map
+
+        dims = OrderedDict([
+            ("PAIR::offset::ps1-ps75", self._meta("PAIR::offset::ps1-ps75", "Offset", ["PS1", "PS75"], ["SPC_CW"])),
+            ("SPC_B", self._meta("SPC_B", "Width", ["C1"])),
+        ])
+        labels = build_display_map(dims)
+        assert labels["PAIR::offset::ps1-ps75"] == "Offset"
+        assert labels["SPC_B"] == "SPC_B — Width"
+
+    def test_collision_appends_bubble_and_span(self):
+        from spc_viz.ui.dimension_picker import build_display_map
+
+        # SPC_CY (PS35-37) and SPC_CW (PS1-75), same description -> both paired,
+        # same base label -> must be disambiguated, both selectable.
+        dims = OrderedDict([
+            ("PAIR::offset::ps35-ps37", self._meta("PAIR::offset::ps35-ps37", "Offset", ["PS35", "PS37"], ["SPC_CY"])),
+            ("PAIR::offset::ps1-ps75", self._meta("PAIR::offset::ps1-ps75", "Offset", ["PS1", "PS75"], ["SPC_CW"])),
+        ])
+        labels = build_display_map(dims)
+        assert labels["PAIR::offset::ps35-ps37"] == "Offset (SPC_CY · PS35–PS37)"
+        assert labels["PAIR::offset::ps1-ps75"] == "Offset (SPC_CW · PS1–PS75)"
+        assert len(set(labels.values())) == 2
+
+    def test_multi_id_pair_falls_back_to_span(self):
+        from spc_viz.ui.dimension_picker import build_display_map
+
+        # A pair spanning two bubble ids (PP SPC_BA + AP SPC_AU) can't show one
+        # id, so it falls back to the point span alone.
+        dims = OrderedDict([
+            ("PAIR::s::c76-c95", self._meta("PAIR::s::c76-c95", "Straightness", ["C76", "C95"], ["SPC_AU", "SPC_BA"])),
+            ("PAIR::s::c10-c20", self._meta("PAIR::s::c10-c20", "Straightness", ["C10", "C20"], ["SPC_X", "SPC_Y"])),
+        ])
+        labels = build_display_map(dims)
+        assert labels["PAIR::s::c76-c95"] == "Straightness (C76–C95)"
+        assert labels["PAIR::s::c10-c20"] == "Straightness (C10–C20)"

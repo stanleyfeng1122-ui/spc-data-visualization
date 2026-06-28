@@ -158,6 +158,25 @@ def merge_dimension_groups(
     for ci, dno in col_dim_no.items():
         dim_groups.setdefault(dno, []).append(ci)
 
+    # ponytail: a vendor bubble-id is sometimes reused for an unrelated feature
+    # in the same sheet (e.g. SPC_AU tags both "Left Side Edge Straightness"
+    # C76-C95 AND a stray "Inner Dome Flatness" column). Keep only columns whose
+    # description matches the dimension's primary (first-column) description, so
+    # a foreign column can't contaminate it with a phantom point. Blank
+    # descriptions are kept — compact-format sub-columns inherit the parent's.
+    for dno, cols in list(dim_groups.items()):
+        primary = (col_desc.get(cols[0], "") or "").strip()
+        if not primary:
+            continue
+        kept = [
+            ci
+            for ci in cols
+            if not (col_desc.get(ci, "") or "").strip()
+            or (col_desc.get(ci, "") or "").strip() == primary
+        ]
+        if len(kept) != len(cols):
+            dim_groups[dno] = kept
+
     merged_groups: OrderedDict = OrderedDict()  # parent_name -> list of col indices
     merged_descs: dict = {}  # parent_name -> description
     consumed: set = set()  # dim_nos already merged

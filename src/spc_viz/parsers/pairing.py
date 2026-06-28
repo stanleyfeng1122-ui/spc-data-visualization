@@ -92,6 +92,7 @@ def _build_pair_meta(pair_id: str, feature_name: str, members: list[dict]) -> Di
         lsl=_merged_spec([m["meta"].lsl for m in members], "min"),
         col_indices=list(range(1, len(point_numbers) + 1)),
         col_labels=col_labels,
+        source_dim_nos=sorted({m["dim_no"] for m in members}),
     )
 
 

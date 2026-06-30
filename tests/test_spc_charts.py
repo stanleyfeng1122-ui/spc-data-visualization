@@ -429,6 +429,72 @@ class TestBoxPlot:
             f"Section-by Factory should split boxes by factory; got {xs}"
         )
 
+    def test_shows_average_labels(self, multi_point_data, common_kwargs):
+        df, dim_metas = multi_point_data
+        fig = build_box_plot(
+            df=df,
+            dim_metas=dim_metas,
+            dim_nos=["SPC_HG"],
+            y_axis_mode="Measurement values",
+            custom_yrange=None,
+            **common_kwargs,
+        )
+        stat_anns = [a for a in (fig.layout.annotations or []) if "Avg" in str(a.text)]
+        assert len(stat_anns) > 0, "Box plot should show readable Avg labels"
+        box = [t for t in fig.data if t.type == "box"][0]
+        assert box.boxmean is True, "Box should draw the mean line"
+
+    def test_x_category_count_for_width_capping(self):
+        from spc_viz.ui.chart_view import _x_category_count
+
+        df = pd.DataFrame({"SPC_W_P0": [1.0, 2.0, 3.0, 4.0]})
+        df["Factory"] = ["A", "A", "B", "B"]
+        df["_factory"] = df["Factory"]
+        meta = DimensionMeta(
+            "SPC_W", "Weight", "Non-Profile", ["P0"],
+            [0], [1], [1], [1], [0], [1], ["SPC_W_P0"],
+        )
+        fig = build_box_plot(
+            df=df,
+            dim_metas=OrderedDict([("SPC_W", meta)]),
+            dim_nos=["SPC_W"],
+            color_by="None",
+            y_axis_mode="Measurement values",
+            exclude_intervals=False,
+            group_label="Weight",
+            section_by_fields=["Factory"],
+        )
+        assert _x_category_count(fig, "Box Plot") == 2
+        assert _x_category_count(fig, "Histogram") is None
+
+    def test_section_draws_profile_style_header_bands(self, multi_point_data, common_kwargs):
+        # Sections should render header bands (paper-coord rects) + labels like
+        # the combined profile, not tilted bottom labels.
+        df, dim_metas = multi_point_data  # Factory FJS / LYC
+        fig = build_box_plot(
+            df=df,
+            dim_metas=dim_metas,
+            dim_nos=["SPC_HG"],
+            y_axis_mode="Measurement values",
+            custom_yrange=None,
+            section_by_fields=["Factory"],
+            **common_kwargs,
+        )
+        band_rects = [
+            s
+            for s in (fig.layout.shapes or [])
+            if getattr(s, "xref", None) == "paper"
+            and getattr(s, "yref", None) == "paper"
+            and s.type == "rect"
+        ]
+        assert len(band_rects) >= 2, "Expected one header band per section"
+        band_labels = " ".join(
+            a.text or ""
+            for a in (fig.layout.annotations or [])
+            if getattr(a, "yref", None) == "paper"
+        )
+        assert "FJS" in band_labels and "LYC" in band_labels
+
 
 # ---------------------------------------------------------------------------
 # 7. Histogram
@@ -1439,3 +1505,33 @@ class TestDisplayMapDisambiguation:
         labels = build_display_map(dims)
         assert labels["PAIR::s::c76-c95"] == "Straightness (C76–C95)"
         assert labels["PAIR::s::c10-c20"] == "Straightness (C10–C20)"
+
+
+class TestHeaderDetect:
+    """Header scan must reach sheets with many leading metadata columns."""
+
+    class _Cell:
+        def __init__(self, value):
+            self.value = value
+
+    def _grid(self, label_row, label_col, text="Dim. No.", n_rows=8, n_cols=42):
+        rows = []
+        for r in range(n_rows):
+            row = [self._Cell(None) for _ in range(n_cols)]
+            if r == label_row:
+                row[label_col] = self._Cell(text)
+            rows.append(row)
+        return rows
+
+    def test_finds_dim_no_beyond_col_30(self):
+        # Real vendor sheet (FXJS PP CORR) puts "Dim. No." at column 38.
+        from spc_viz.parsers.header_detect import _find_dim_no_cell
+
+        rows = self._grid(label_row=5, label_col=37)  # 0-based -> row6, col38
+        assert _find_dim_no_cell(rows) == (6, 38)
+
+    def test_still_finds_near_left(self):
+        from spc_viz.parsers.header_detect import _find_dim_no_cell
+
+        rows = self._grid(label_row=5, label_col=19)  # AP CORR style, col20
+        assert _find_dim_no_cell(rows) == (6, 20)

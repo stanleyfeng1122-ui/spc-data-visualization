@@ -37,10 +37,15 @@ KNOWN_META_HEADERS = {
 # ---------------------------------------------------------------------------
 
 
-def _find_dim_no_cell(rows, max_scan_rows=50, max_scan_cols=30):
+def _find_dim_no_cell(rows, max_scan_rows=50, max_scan_cols=80):
     """
     Scan the top-left area of a sheet looking for a cell that says "Dim. No."
     (case-insensitive).  Returns (row_1based, col_1based) or (None, None).
+
+    The column scan must be wide enough to cover sheets with many leading
+    metadata columns: some vendor "Data Input" sheets place "Dim. No." as far
+    right as column 38, so a narrow window silently misses the header and the
+    sheet fails to parse.
     """
     for ri in range(min(max_scan_rows, len(rows))):
         row = rows[ri]

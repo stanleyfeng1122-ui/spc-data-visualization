@@ -89,6 +89,23 @@ def _build_chart_figure(
     return fig
 
 
+def _x_category_count(fig: Figure, chart_type: str) -> int | None:
+    """Approximate number of distinct x positions, to size few-category charts.
+
+    Returns None when the chart type shouldn't be width-capped.
+    """
+    if chart_type == "Box Plot":
+        xs = {x for t in fig.data if t.type == "box" and t.x is not None for x in t.x}
+        return len(xs) or None
+    if chart_type == "Combined Profile":
+        cnt = 0
+        for t in fig.data:
+            if t.type in ("scatter", "scattergl") and t.x is not None:
+                cnt = max(cnt, len({x for x in t.x if x is not None}))
+        return cnt or None
+    return None
+
+
 def build_and_render_chart(
     df_clean: DataFrame,
     dim_metas: OrderedDict[str, DimensionMeta],
@@ -116,5 +133,15 @@ def build_and_render_chart(
         st.warning("Could not generate chart. Check dimensions have data.")
         st.stop()
 
-    st.plotly_chart(fig, use_container_width=True, key=f"{key_prefix}main_chart")
+    # Few categories/points: don't stretch edge-to-edge — render in a centered,
+    # narrower column (~3 page-units per box) so 2 boxes aren't marooned.
+    n_x = _x_category_count(fig, controls.chart_type)
+    if n_x is not None and n_x <= 6:
+        # ~50% width for 2 boxes, widening to near-full by ~4 boxes; centered.
+        mid = min(18, max(9, n_x * 5))
+        side = max(1, (20 - mid) // 2)
+        _, center, _ = st.columns([side, mid, side])
+        center.plotly_chart(fig, use_container_width=True, key=f"{key_prefix}main_chart")
+    else:
+        st.plotly_chart(fig, use_container_width=True, key=f"{key_prefix}main_chart")
     return fig

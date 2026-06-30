@@ -13,7 +13,10 @@ from spc_viz.parsers.pairing import is_paired_dim_id
 
 def _dimension_display_label(dno: str, dmeta: DimensionMeta) -> str:
     if is_paired_dim_id(dno):
-        return dmeta.description or dno
+        ids = " / ".join(dmeta.source_dim_nos or [])
+        if ids and dmeta.description:
+            return f"{ids} — {dmeta.description}"
+        return ids or dmeta.description or dno
     return f"{dno} — {dmeta.description}" if dmeta.description else dno
 
 

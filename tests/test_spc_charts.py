@@ -1490,43 +1490,54 @@ class TestDisplayMapDisambiguation:
             col_indices=[], col_labels=[], source_dim_nos=source_dim_nos,
         )
 
-    def test_no_collision_keeps_clean_label(self):
+    def test_paired_label_shows_source_bubble_id(self):
         from spc_viz.ui.dimension_picker import build_display_map
 
+        # Every paired dim now carries its source SPC bubble id alongside the
+        # description, so two dims sharing a description stay distinguishable.
         dims = OrderedDict([
             ("PAIR::offset::ps1-ps75", self._meta("PAIR::offset::ps1-ps75", "Offset", ["PS1", "PS75"], ["SPC_CW"])),
             ("SPC_B", self._meta("SPC_B", "Width", ["C1"])),
         ])
         labels = build_display_map(dims)
-        assert labels["PAIR::offset::ps1-ps75"] == "Offset"
+        assert labels["PAIR::offset::ps1-ps75"] == "SPC_CW — Offset"
+        assert "SPC_CW" in labels["PAIR::offset::ps1-ps75"]
         assert labels["SPC_B"] == "SPC_B — Width"
 
-    def test_collision_appends_bubble_and_span(self):
+    def test_multi_id_pair_joins_source_ids(self):
         from spc_viz.ui.dimension_picker import build_display_map
 
-        # SPC_CY (PS35-37) and SPC_CW (PS1-75), same description -> both paired,
-        # same base label -> must be disambiguated, both selectable.
+        # A pair spanning two bubble ids (AP SPC_AU + PP SPC_BA) shows both,
+        # joined with " / ".
         dims = OrderedDict([
-            ("PAIR::offset::ps35-ps37", self._meta("PAIR::offset::ps35-ps37", "Offset", ["PS35", "PS37"], ["SPC_CY"])),
+            ("PAIR::s::c76-c95", self._meta("PAIR::s::c76-c95", "Left Side Edge Straightness", ["C76", "C95"], ["SPC_AU", "SPC_BA"])),
+        ])
+        labels = build_display_map(dims)
+        assert labels["PAIR::s::c76-c95"] == "SPC_AU / SPC_BA — Left Side Edge Straightness"
+
+    def test_missing_source_ids_falls_back_to_description(self):
+        from spc_viz.ui.dimension_picker import build_display_map
+
+        dims = OrderedDict([
+            ("PAIR::offset::ps1-ps75", self._meta("PAIR::offset::ps1-ps75", "Offset", ["PS1", "PS75"], None)),
+        ])
+        labels = build_display_map(dims)
+        assert labels["PAIR::offset::ps1-ps75"] == "Offset"
+
+    def test_collision_appends_span_when_ids_match(self):
+        from spc_viz.ui.dimension_picker import build_display_map
+
+        # Same source id AND same description -> base labels still collide, so
+        # the point span disambiguates them; both stay selectable.
+        dims = OrderedDict([
+            ("PAIR::offset::ps35-ps37", self._meta("PAIR::offset::ps35-ps37", "Offset", ["PS35", "PS37"], ["SPC_CW"])),
             ("PAIR::offset::ps1-ps75", self._meta("PAIR::offset::ps1-ps75", "Offset", ["PS1", "PS75"], ["SPC_CW"])),
         ])
         labels = build_display_map(dims)
-        assert labels["PAIR::offset::ps35-ps37"] == "Offset (SPC_CY · PS35–PS37)"
-        assert labels["PAIR::offset::ps1-ps75"] == "Offset (SPC_CW · PS1–PS75)"
+        assert labels["PAIR::offset::ps35-ps37"] == "SPC_CW — Offset (SPC_CW · PS35–PS37)"
+        assert labels["PAIR::offset::ps1-ps75"] == "SPC_CW — Offset (SPC_CW · PS1–PS75)"
         assert len(set(labels.values())) == 2
-
-    def test_multi_id_pair_falls_back_to_span(self):
-        from spc_viz.ui.dimension_picker import build_display_map
-
-        # A pair spanning two bubble ids (PP SPC_BA + AP SPC_AU) can't show one
-        # id, so it falls back to the point span alone.
-        dims = OrderedDict([
-            ("PAIR::s::c76-c95", self._meta("PAIR::s::c76-c95", "Straightness", ["C76", "C95"], ["SPC_AU", "SPC_BA"])),
-            ("PAIR::s::c10-c20", self._meta("PAIR::s::c10-c20", "Straightness", ["C10", "C20"], ["SPC_X", "SPC_Y"])),
-        ])
-        labels = build_display_map(dims)
-        assert labels["PAIR::s::c76-c95"] == "Straightness (C76–C95)"
-        assert labels["PAIR::s::c10-c20"] == "Straightness (C10–C20)"
+        assert all("SPC_CW" in lbl for lbl in labels.values())
 
 
 class TestHeaderDetect:

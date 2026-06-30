@@ -880,6 +880,32 @@ class TestCrossSheetDimensionPairing:
         assert set(df["Source Condition"]) == {"POR"}
         assert set(df["Original Dimension"]) == {"SPC_AR", "SPC_AT"}
 
+    def test_same_sheet_different_bubbles_never_pair(self):
+        # SPC_GS and SPC_GU share a description but are different features in the
+        # SAME PP sheet (different specs) -> must stay separate, never merged.
+        from spc_viz.parsers.pairing import is_paired_dim_id
+
+        gs = _paired_meta("SPC_GS", "Putter pocket edge width", ["R"], 0.8, -0.6)
+        gu = _paired_meta("SPC_GU", "Putter pocket edge width", ["R"], 0.57, -0.37)
+        data = pd.DataFrame({gs.col_labels[0]: [0.70, 0.71], gu.col_labels[0]: [0.47, 0.46]})
+        data["CFG"] = ["A", "A"]
+        pf = {
+            "filename": "f.xlsx",
+            "sheet_name": "PP Data Input POR",
+            "part_number": None,
+            "part_description": None,
+            "revision": None,
+            "factory": None,
+            "dimensions": OrderedDict([("SPC_GS", gs), ("SPC_GU", gu)]),
+            "data": data,
+            "meta_columns": ["CFG"],
+        }
+        dimensions = build_paired_dimension_map([pf])
+        assert "SPC_GS" in dimensions and "SPC_GU" in dimensions
+        assert not any(is_paired_dim_id(d) for d in dimensions), (
+            f"different bubbles in one sheet must not merge: {list(dimensions)}"
+        )
+
 
 # ---------------------------------------------------------------------------
 # 12. compute_sections

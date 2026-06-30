@@ -139,8 +139,25 @@ def build_paired_dimension_map(parsed_files: list[dict]) -> OrderedDict[str, Dim
 
     for (feature_name, points), members in groups.items():
         distinct_dims = {m["dim_no"] for m in members}
-        distinct_sheets = {m["sheet_name"] for m in members}
-        if len(members) < 2 or (len(distinct_dims) < 2 and len(distinct_sheets) < 2):
+        levels = {_detect_source_level(m["sheet_name"] or "") for m in members}
+        # Bubble ids seen within each sheet. Two DIFFERENT bubble ids in ONE
+        # sheet that share a description (e.g. SPC_GS and SPC_GU both in a PP
+        # sheet) are genuinely different features the vendor named alike — never
+        # merge them, even if they also appear in the AP sheet.
+        sheet_bubbles: dict[str | None, set[str]] = {}
+        for m in members:
+            sheet_bubbles.setdefault(m["sheet_name"], set()).add(m["dim_no"])
+        co_occur = any(len(ids) >= 2 for ids in sheet_bubbles.values())
+        # Pair ONLY when DIFFERENT bubble ids name the SAME feature across BOTH
+        # PP and AP (so the PP->AP change can be tracked, e.g. SPC_BA in PP +
+        # SPC_AU in AP) and they never co-occur in a single sheet. A shared
+        # bubble id across files combines naturally in the fall-through below.
+        if (
+            len(members) < 2
+            or len(distinct_dims) < 2
+            or not ({"PP", "AP"} <= levels)
+            or co_occur
+        ):
             continue
 
         point_span = f"{points[0]}-{points[-1]}" if points else "points"

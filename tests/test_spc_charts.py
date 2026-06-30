@@ -1444,6 +1444,28 @@ class TestBubbleIdReuse:
         assert meta.point_numbers == ["C1", "C2", "C3"]
         assert all(not p.startswith("P") for p in meta.point_numbers)
 
+    def test_contiguous_same_bubble_columns_kept_despite_typos(self):
+        # SPC_GG-style: 4 CONTIGUOUS columns under one bubble id where the vendor
+        # typo'd alternating descriptions. They are one dimension with 4 points
+        # and must ALL be kept — the contiguous run governs over description.
+        from spc_viz.parsers.measurements import merge_dimension_groups
+
+        col_dim_no = {1: "SPC_X", 2: "SPC_X", 3: "SPC_X", 4: "SPC_X"}
+        col_desc = {
+            1: "PSA shelf to mudflap Offset",
+            2: "Intermediate Pocket to Datum M Offset",  # typo
+            3: "PSA shelf to mudflap Offset",
+            4: "Intermediate Pocket to Datum M Offset",  # typo
+        }
+        col_point = {1: "C1", 2: "C2", 3: "C3", 4: "C4"}
+        empty: dict = {}
+        dims = merge_dimension_groups(
+            col_dim_no, col_desc, empty, col_point, empty, empty, empty, empty, empty
+        )
+
+        assert list(dims.keys()) == ["SPC_X"]
+        assert dims["SPC_X"].point_numbers == ["C1", "C2", "C3", "C4"]
+
     def test_blank_descriptions_are_kept(self):
         # Compact-format sub-columns carry blank descriptions and must survive.
         from spc_viz.parsers.measurements import merge_dimension_groups

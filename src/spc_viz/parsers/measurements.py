@@ -160,18 +160,29 @@ def merge_dimension_groups(
 
     # ponytail: a vendor bubble-id is sometimes reused for an unrelated feature
     # in the same sheet (e.g. SPC_AU tags both "Left Side Edge Straightness"
-    # C76-C95 AND a stray "Inner Dome Flatness" column). Keep only columns whose
-    # description matches the dimension's primary (first-column) description, so
-    # a foreign column can't contaminate it with a phantom point. Blank
+    # C76-C95 AND a stray "Inner Dome Flatness" column far away). Drop a
+    # differing-description column ONLY when it is non-contiguous with the
+    # dimension's main run (consecutive indices from the first column) — a
+    # foreign column sits past a gap, so it can't contaminate with a phantom
+    # point. Columns inside the contiguous run stay together even when the
+    # vendor typo'd some descriptions (e.g. SPC_GG cols 760-763). Blank
     # descriptions are kept — compact-format sub-columns inherit the parent's.
     for dno, cols in list(dim_groups.items()):
         primary = (col_desc.get(cols[0], "") or "").strip()
         if not primary:
             continue
+        # Length of the consecutive-index run starting at the first column.
+        run_len = 1
+        for ci in cols[1:]:
+            if ci == cols[run_len - 1] + 1:
+                run_len += 1
+            else:
+                break
         kept = [
             ci
-            for ci in cols
-            if not (col_desc.get(ci, "") or "").strip()
+            for idx, ci in enumerate(cols)
+            if idx < run_len
+            or not (col_desc.get(ci, "") or "").strip()
             or (col_desc.get(ci, "") or "").strip() == primary
         ]
         if len(kept) != len(cols):

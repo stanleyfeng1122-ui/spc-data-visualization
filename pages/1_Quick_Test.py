@@ -31,6 +31,7 @@ from spc_viz.ui import (
     build_point_filter,
     prepare_and_clean,
     render_batch_export,
+    settle,
 )
 
 # ---------------------------------------------------------------------------
@@ -176,6 +177,12 @@ with hdr_left:
         f"</span>",
         unsafe_allow_html=True,
     )
+
+# Let the user finish multi-picking dimensions/points before charting.
+settle(
+    "qt_settle_chart",
+    (tuple(selected_dim_nos), exclude_intervals, tuple(selected_points or ()), controls),
+)
 
 df_clean, dim_metas, _ = prepare_and_clean(parsed_files, selected_dim_nos)
 df_clean, active_filters = build_data_filters(parsed_files, df_clean, key_prefix=KP)

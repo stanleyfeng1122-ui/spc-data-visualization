@@ -73,7 +73,9 @@ BOX_STYLE = SpecStyle(
     lsl_label=("LSL", "bottom right"),
     nominal_line=dict(color="rgba(34,197,94,0.5)", dash="dot", width=1),
     nominal_label=("Nominal", "top right"),
-    axis_label_mode="rep",
+    # "unique" = rep labels when uniform (historical look), all distinct spec
+    # values in profile's convention when stepping (design decision, C2).
+    axis_label_mode="unique",
     axis_label_anchor="right",
 )
 HISTOGRAM_STYLE = SpecStyle(

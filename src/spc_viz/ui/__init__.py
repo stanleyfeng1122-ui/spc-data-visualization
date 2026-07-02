@@ -17,7 +17,7 @@ from .sidebar import (
     build_chart_controls,
     build_color_pickers,
 )
-from .state import ChartControls, prepare_and_clean
+from .state import ChartControls, prepare_and_clean, settle
 
 __all__ = [
     "ChartControls",
@@ -32,4 +32,5 @@ __all__ = [
     "build_point_filter",
     "prepare_and_clean",
     "render_batch_export",
+    "settle",
 ]

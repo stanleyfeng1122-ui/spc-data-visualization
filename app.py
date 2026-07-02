@@ -28,6 +28,7 @@ from spc_viz.ui import (
     build_point_filter,
     prepare_and_clean,
     render_batch_export,
+    settle,
 )
 from spc_viz.ui.file_sources import (
     discover_local_xlsx_files,
@@ -141,6 +142,9 @@ enabled_sheets = st.sidebar.multiselect(
 if not enabled_sheets:
     st.info("Select at least one sheet to parse.")
     st.stop()
+
+# Let the user finish multi-picking sheets before the (expensive) parse runs.
+settle("main_settle_sheets", tuple(enabled_sheets))
 
 
 def _get_actual_sheets_for_file(fname, enabled):
@@ -259,6 +263,12 @@ controls = build_chart_controls(parsed_files, key_prefix=KP)
 # Main content area
 # ---------------------------------------------------------------------------
 st.title("SPC Data Visualization")
+
+# Let the user finish multi-picking dimensions/points before charting.
+settle(
+    "main_settle_chart",
+    (tuple(selected_dim_nos), exclude_intervals, tuple(selected_points or ()), controls),
+)
 
 df_clean, dim_metas, _ = prepare_and_clean(parsed_files, selected_dim_nos)
 df_clean, active_filters = build_data_filters(parsed_files, df_clean, key_prefix=KP)

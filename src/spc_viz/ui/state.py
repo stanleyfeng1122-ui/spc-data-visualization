@@ -40,6 +40,49 @@ class ChartControls:
 
 
 # ---------------------------------------------------------------------------
+# Settle gate — defer heavy work until a multi-pick selection stops changing
+# ---------------------------------------------------------------------------
+
+SETTLE_SECONDS = 1.2
+
+
+def _settle_decision(
+    prev: tuple | None, value: object, now: float, delay: float
+) -> tuple[tuple, float]:
+    """Pure timing logic: return (state_to_store, seconds_still_to_wait).
+
+    ``prev`` is the stored (value, first_seen_ts) pair, or None on the very
+    first observation — which counts as already settled so a cold start never
+    waits.
+    """
+    if prev is None:
+        return (value, now - delay), 0.0
+    prev_value, ts = prev
+    if value != prev_value:
+        return (value, now), delay
+    return (prev_value, ts), max(0.0, delay - (now - ts))
+
+
+def settle(key: str, value: object, delay: float = SETTLE_SECONDS) -> None:
+    """Skip the rest of this run until ``value`` has been stable for ``delay``s.
+
+    Streamlit reruns the whole script on every widget click, so picking five
+    items in a multiselect used to mean five full parse+render cycles. Placing
+    this gate before an expensive stage makes the intermediate reruns cheap:
+    while the user is still picking, each click just restarts the quiet
+    window; processing starts once — roughly when they close the dropdown.
+    """
+    import time
+
+    now = time.time()
+    state, remaining = _settle_decision(st.session_state.get(key), value, now, delay)
+    st.session_state[key] = state
+    if remaining > 0:
+        time.sleep(remaining)
+        st.rerun()
+
+
+# ---------------------------------------------------------------------------
 # Data preparation helper
 # ---------------------------------------------------------------------------
 

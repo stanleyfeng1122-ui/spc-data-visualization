@@ -171,6 +171,9 @@ def build_box_plot(
     ordered_cats: list[str] = []
     cat_section: dict[str, str | None] = {}
     cat_tick: dict[str, str] = {}
+    cat_dim: dict[str, str] = {}
+    # First non-None spec per dim — the stepping span for that dim's categories.
+    dim_rep_specs: OrderedDict[str, tuple] = OrderedDict()
     # Per-box stats for the readable mean/median labels.
     box_stats: list[tuple[str, int | None, str, float, float, float, float]] = []
 
@@ -189,6 +192,8 @@ def build_box_plot(
                     base_point = f"{dno}_{point_num}" if multi_dim else point_num
                     if rep_usl is None and usl_val is not None:
                         rep_usl, rep_lsl, rep_nom = usl_val, lsl_val, nominal
+                    if dno not in dim_rep_specs and usl_val is not None:
+                        dim_rep_specs[dno] = (usl_val, lsl_val, nominal)
 
                     if not sectioned:
                         cat, tick, sec_lbl = base_point, base_point, None
@@ -214,6 +219,7 @@ def build_box_plot(
                             ordered_cats.append(cat)
                             cat_section[cat] = sec_lbl
                             cat_tick[cat] = tick
+                            cat_dim[cat] = dno
 
                         show_legend = grp_name not in legend_shown
                         legend_shown.add(grp_name)
@@ -249,7 +255,25 @@ def build_box_plot(
                         )
 
     row_kwargs_list = [dict(row=i + 1, col=1) for i in range(n_rows)] if use_row_facets else [{}]
-    spec_spans = [SpecSpan(usl=rep_usl, lsl=rep_lsl, nominal=rep_nom)]
+    unique_dim_specs = {(u, lo) for u, lo, _ in dim_rep_specs.values()}
+    if len(unique_dim_specs) > 1 and ordered_cats:
+        # Stepping: selected dims carry different specs. One span per contiguous
+        # run of same-dim categories (section is the outer loop, so runs are
+        # per section × dim, like the profile's stepping cells). Shapes use
+        # numeric x = category index on the categorical axis.
+        spec_spans = []
+        run_start = 0
+        for i in range(1, len(ordered_cats) + 1):
+            if i == len(ordered_cats) or cat_dim[ordered_cats[i]] != cat_dim[ordered_cats[run_start]]:
+                dno = cat_dim[ordered_cats[run_start]]
+                if dno in dim_rep_specs:
+                    u, lo, nom = dim_rep_specs[dno]
+                    spec_spans.append(
+                        SpecSpan(usl=u, lsl=lo, nominal=nom, x0=run_start - 0.5, x1=i - 0.5)
+                    )
+                run_start = i
+    else:
+        spec_spans = [SpecSpan(usl=rep_usl, lsl=rep_lsl, nominal=rep_nom)]
     render_spec_limits(
         fig,
         spec_spans,

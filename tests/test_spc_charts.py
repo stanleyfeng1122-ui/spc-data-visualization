@@ -444,6 +444,35 @@ class TestBoxPlot:
         box = [t for t in fig.data if t.type == "box"][0]
         assert box.boxmean is True, "Box should draw the mean line"
 
+    def test_stepping_specs_for_dims_with_different_limits(self):
+        # Two dims sharing a description but different specs (the SPC_GS /
+        # SPC_GU case) must each get their OWN spec band, not the first dim's.
+        cols_a, meta_a = _make_dim_meta("SPC_GS", "Putter pocket edge width", 1, nominal=0.7, usl=0.8, lsl=0.6)
+        cols_b, meta_b = _make_dim_meta("SPC_GU", "Putter pocket edge width", 1, nominal=0.47, usl=0.57, lsl=0.37)
+        df = pd.DataFrame(
+            {cols_a[0]: np.random.uniform(0.65, 0.75, 20), cols_b[0]: np.random.uniform(0.42, 0.52, 20)}
+        )
+        dim_metas = OrderedDict([("SPC_GS", meta_a), ("SPC_GU", meta_b)])
+        fig = build_box_plot(
+            df=df,
+            dim_metas=dim_metas,
+            dim_nos=["SPC_GS", "SPC_GU"],
+            color_by="None",
+            y_axis_mode="Measurement values",
+            exclude_intervals=False,
+            group_label="Putter pocket edge width",
+        )
+        seg_lines = [
+            s for s in (fig.layout.shapes or []) if s.type == "line" and s.x0 is not None
+        ]
+        # per dim: USL + LSL segment
+        usl_ys = sorted(round(s.y0, 4) for s in seg_lines)
+        assert 0.57 in usl_ys and 0.8 in usl_ys, f"each dim needs its own USL, got {usl_ys}"
+        texts = [str(a.text) for a in (fig.layout.annotations or [])]
+        assert any("USL-0.8" in t for t in texts) and any("USL-0.57" in t for t in texts), (
+            f"stepping labels should list both USL values, got {texts}"
+        )
+
     def test_x_category_count_for_width_capping(self):
         from spc_viz.ui.chart_view import _x_category_count
 
@@ -1594,6 +1623,34 @@ class TestHeaderDetect:
 
         rows = self._grid(label_row=5, label_col=19)  # AP CORR style, col20
         assert _find_dim_no_cell(rows) == (6, 20)
+
+
+class TestSettleGate:
+    """Pure timing logic behind the multi-pick settle gate."""
+
+    def test_first_observation_never_waits(self):
+        from spc_viz.ui.state import _settle_decision
+
+        state, wait = _settle_decision(None, ("a",), now=100.0, delay=1.2)
+        assert wait == 0.0
+        assert state[0] == ("a",)
+
+    def test_change_starts_full_window(self):
+        from spc_viz.ui.state import _settle_decision
+
+        prev = (("a",), 100.0)
+        state, wait = _settle_decision(prev, ("a", "b"), now=100.5, delay=1.2)
+        assert wait == 1.2
+        assert state == (("a", "b"), 100.5)
+
+    def test_stable_value_waits_only_remainder_then_zero(self):
+        from spc_viz.ui.state import _settle_decision
+
+        prev = (("a", "b"), 100.0)
+        _, wait = _settle_decision(prev, ("a", "b"), now=100.5, delay=1.2)
+        assert abs(wait - 0.7) < 1e-9
+        _, wait2 = _settle_decision(prev, ("a", "b"), now=101.5, delay=1.2)
+        assert wait2 == 0.0
 
 
 class TestSpecLimitsModule:

@@ -23,6 +23,7 @@ from .base import (
     has_domain_section_order,
     section_sort_key,
 )
+from .spec_limits import ENVELOPE_STYLE, SpecSpan, render_spec_limits, spec_axis_annotations
 
 
 def _hex_to_rgba(color: str, alpha: float) -> str:
@@ -141,7 +142,7 @@ def build_range_envelope_chart(
     all_tick_vals: list[float] = []
     all_tick_text: list[str] = []
     section_boundaries: list[float] = []
-    spec_segments: list[tuple[float, float, float | None, float | None, float | None]] = []
+    spec_segments: list[SpecSpan] = []
 
     for sec_idx, sec_label in enumerate(unique_sections):
         for dno, (col_labels, point_nums, nominals, usls, lsls) in dim_point_info.items():
@@ -152,7 +153,9 @@ def build_range_envelope_chart(
                 label = f"{dno}_{point_num}" if multi_dim else point_num
                 all_tick_text.append(label if label else "")
             for xi, nominal, usl, lsl in zip(x_positions, nominals, usls, lsls):
-                spec_segments.append((xi - 0.5, xi + 0.5, nominal, usl, lsl))
+                spec_segments.append(
+                    SpecSpan(usl=usl, lsl=lsl, nominal=nominal, x0=xi - 0.5, x1=xi + 0.5)
+                )
             x_offset += len(col_labels)
 
         if sec_idx < len(unique_sections) - 1:
@@ -246,43 +249,18 @@ def build_range_envelope_chart(
                 )
             )
 
-    dash_style = dict(color="rgba(220,38,38,0.55)", dash="dash", width=1.2)
-    spec_values: list[tuple[float, str]] = []
-    unique_usls = {seg[3] for seg in spec_segments if seg[3] is not None}
-    unique_lsls = {seg[4] for seg in spec_segments if seg[4] is not None}
+    unique_usls = {s.usl for s in spec_segments if s.usl is not None}
+    unique_lsls = {s.lsl for s in spec_segments if s.lsl is not None}
     use_stepping = len(unique_usls) > 1 or len(unique_lsls) > 1
 
+    # Uniform spec collapses to one full-width span (a single hline + band);
+    # stepping keeps the per-point segments.
     if not use_stepping and spec_segments:
-        nominal, usl, lsl = spec_segments[0][2], spec_segments[0][3], spec_segments[0][4]
-        if usl is not None:
-            ref_usl = usl - nominal if deviation_mode and nominal is not None else usl
-            fig.add_hline(y=ref_usl, line=dash_style)
-            spec_values.append((ref_usl, f"USL-{ref_usl:.4g}"))
-        if lsl is not None:
-            ref_lsl = lsl - nominal if deviation_mode and nominal is not None else lsl
-            fig.add_hline(y=ref_lsl, line=dash_style)
-            spec_values.append((ref_lsl, f"LSL-{ref_lsl:.4g}"))
-        if usl is not None and lsl is not None:
-            band_usl = usl - nominal if deviation_mode and nominal is not None else usl
-            band_lsl = lsl - nominal if deviation_mode and nominal is not None else lsl
-            fig.add_hrect(
-                y0=band_lsl,
-                y1=band_usl,
-                fillcolor="rgba(34, 197, 94, 0.10)",
-                line_width=0,
-                layer="below",
-            )
+        s0 = spec_segments[0]
+        spec_spans = [SpecSpan(usl=s0.usl, lsl=s0.lsl, nominal=s0.nominal)]
     else:
-        for x0, x1, nominal, usl, lsl in spec_segments:
-            nom_for_dev = nominal if deviation_mode and nominal is not None else 0.0
-            if usl is not None:
-                y_usl = usl - nom_for_dev if deviation_mode else usl
-                fig.add_shape(type="line", x0=x0, x1=x1, y0=y_usl, y1=y_usl, line=dash_style)
-                spec_values.append((y_usl, f"USL-{y_usl:.4g}"))
-            if lsl is not None:
-                y_lsl = lsl - nom_for_dev if deviation_mode else lsl
-                fig.add_shape(type="line", x0=x0, x1=x1, y0=y_lsl, y1=y_lsl, line=dash_style)
-                spec_values.append((y_lsl, f"LSL-{y_lsl:.4g}"))
+        spec_spans = spec_segments
+    render_spec_limits(fig, spec_spans, style=ENVELOPE_STYLE, deviation_mode=deviation_mode)
 
     for boundary_x in section_boundaries:
         fig.add_vline(x=boundary_x, line=dict(color="rgba(100,116,139,0.45)", width=1.1))
@@ -290,27 +268,9 @@ def build_range_envelope_chart(
     tick_step = max(1, len(all_tick_vals) // 80)
     y_title = "Deviation from Nominal" if deviation_mode else "Value"
     y_range_kwargs = dict(range=custom_yrange) if custom_yrange else {}
-    annotations: list[dict] = []
-    seen_spec_labels: set[tuple[float, str]] = set()
-    for val, label in spec_values:
-        key = (round(val, 8), label)
-        if key in seen_spec_labels:
-            continue
-        seen_spec_labels.add(key)
-        annotations.append(
-            dict(
-                x=0.0,
-                y=val,
-                xref="paper",
-                yref="y",
-                text=f"<b>{label}</b>",
-                showarrow=False,
-                xanchor="left",
-                xshift=5,
-                font=dict(size=10, color="rgba(220,38,38,0.9)", family="Arial Black"),
-                bgcolor="rgba(255,255,255,0.7)",
-            )
-        )
+    annotations: list[dict] = spec_axis_annotations(
+        spec_spans, style=ENVELOPE_STYLE, deviation_mode=deviation_mode
+    )
 
     fig.update_layout(
         title=dict(

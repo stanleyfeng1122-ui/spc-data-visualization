@@ -26,6 +26,7 @@ from .base import (
     has_domain_section_order,
     section_sort_key,
 )
+from .spec_limits import PROFILE_STYLE, SpecSpan, render_spec_limits, spec_axis_annotations
 
 # ---------------------------------------------------------------------------
 # Chart building -- combined profile view
@@ -336,8 +337,6 @@ def build_combined_chart(
 
     row_kwargs_list = [dict(row=i + 1, col=1) for i in range(n_rows)] if use_row_facets else [{}]
 
-    dash_style = dict(dash="dash", width=1.2)
-
     # Detect whether multiple selected dims have DIFFERENT spec limits.
     # If they do, draw stepping per-(section, dim) spec line segments rather
     # than a single full-width hline (which would mis-represent the spec for
@@ -358,85 +357,30 @@ def build_combined_chart(
     unique_lsls = {s[1] for s in dim_specs.values() if s[1] is not None}
     use_stepping = len(unique_usls) > 1 or len(unique_lsls) > 1
 
-    for rk in row_kwargs_list:
-        if not use_stepping:
-            # Single spec across all selected dims — draw full-width hline + band
-            if usl_rep is not None and lsl_rep is not None:
-                band_usl = (
-                    (usl_rep - nom_rep) if (deviation_mode and nom_rep is not None) else usl_rep
-                )
-                band_lsl = (
-                    (lsl_rep - nom_rep) if (deviation_mode and nom_rep is not None) else lsl_rep
-                )
-                fig.add_hrect(
-                    y0=band_lsl,
-                    y1=band_usl,
-                    fillcolor="rgba(34, 197, 94, 0.15)",
-                    line_width=0,
-                    layer="below",
-                    **rk,
-                )
-
-            if usl_rep is not None:
-                ref_usl = (
-                    (usl_rep - nom_rep) if (deviation_mode and nom_rep is not None) else usl_rep
-                )
-                fig.add_hline(
-                    y=ref_usl, line=dict(color="rgba(220,38,38,0.5)", **dash_style), **rk
-                )
-
-            if lsl_rep is not None:
-                ref_lsl = (
-                    (lsl_rep - nom_rep) if (deviation_mode and nom_rep is not None) else lsl_rep
-                )
-                fig.add_hline(
-                    y=ref_lsl, line=dict(color="rgba(220,38,38,0.5)", **dash_style), **rk
-                )
-        else:
-            # Stepping mode: draw per-(section, dim) line segments + per-cell bands
-            for sec_label in unique_sections:
-                for dno, (usl_d, lsl_d, nom_d) in dim_specs.items():
-                    xpos = dim_x_positions.get((sec_label, dno))
-                    if not xpos:
-                        continue
-                    x0, x1 = xpos[0] - 0.5, xpos[-1] + 0.5
-                    nom_for_dev = nom_d if (deviation_mode and nom_d is not None) else 0.0
-                    if usl_d is not None and lsl_d is not None:
-                        band_usl = usl_d - nom_for_dev if deviation_mode else usl_d
-                        band_lsl = lsl_d - nom_for_dev if deviation_mode else lsl_d
-                        fig.add_shape(
-                            type="rect",
-                            x0=x0,
-                            x1=x1,
-                            y0=band_lsl,
-                            y1=band_usl,
-                            fillcolor="rgba(34, 197, 94, 0.15)",
-                            line_width=0,
-                            layer="below",
-                            **rk,
-                        )
-                    if usl_d is not None:
-                        y_usl = usl_d - nom_for_dev if deviation_mode else usl_d
-                        fig.add_shape(
-                            type="line",
-                            x0=x0,
-                            x1=x1,
-                            y0=y_usl,
-                            y1=y_usl,
-                            line=dict(color="rgba(220,38,38,0.7)", **dash_style),
-                            **rk,
-                        )
-                    if lsl_d is not None:
-                        y_lsl = lsl_d - nom_for_dev if deviation_mode else lsl_d
-                        fig.add_shape(
-                            type="line",
-                            x0=x0,
-                            x1=x1,
-                            y0=y_lsl,
-                            y1=y_lsl,
-                            line=dict(color="rgba(220,38,38,0.7)", **dash_style),
-                            **rk,
-                        )
+    if use_stepping:
+        # Stepping mode: one span per (section, dim) cell.
+        spec_spans = [
+            SpecSpan(
+                usl=usl_d,
+                lsl=lsl_d,
+                nominal=nom_d,
+                x0=xpos[0] - 0.5,
+                x1=xpos[-1] + 0.5,
+            )
+            for sec_label in unique_sections
+            for dno, (usl_d, lsl_d, nom_d) in dim_specs.items()
+            if (xpos := dim_x_positions.get((sec_label, dno)))
+        ]
+    else:
+        # Single spec across all selected dims — one full-width span.
+        spec_spans = [SpecSpan(usl=usl_rep, lsl=lsl_rep, nominal=nom_rep)]
+    render_spec_limits(
+        fig,
+        spec_spans,
+        style=PROFILE_STYLE,
+        deviation_mode=deviation_mode,
+        rows=row_kwargs_list,
+    )
 
     for bx, common_prefix in section_boundaries:
         if len(section_by_fields) <= 1 or common_prefix == 0:
@@ -536,36 +480,6 @@ def build_combined_chart(
         template="plotly_white",
     )
 
-    spec_tickvals: list[float] = []
-    spec_ticktext: list[str] = []
-    if not use_stepping:
-        if usl_rep is not None:
-            ref_usl = (usl_rep - nom_rep) if (deviation_mode and nom_rep is not None) else usl_rep
-            spec_tickvals.append(ref_usl)
-            spec_ticktext.append(f"USL-{ref_usl:.4g}")
-        if lsl_rep is not None:
-            ref_lsl = (lsl_rep - nom_rep) if (deviation_mode and nom_rep is not None) else lsl_rep
-            spec_tickvals.append(ref_lsl)
-            spec_ticktext.append(f"LSL-{ref_lsl:.4g}")
-    else:
-        # Stepping mode — show ALL unique USL/LSL values as Y-axis ticks
-        # so the engineer sees every spec level present in the selection.
-        seen_usl = set()
-        for u in sorted(unique_usls, reverse=True):
-            if u in seen_usl:
-                continue
-            seen_usl.add(u)
-            ref = u  # deviation mode handled per-dim above; labels reflect raw values
-            spec_tickvals.append(ref)
-            spec_ticktext.append(f"USL-{ref:.4g}")
-        seen_lsl = set()
-        for l in sorted(unique_lsls):
-            if l in seen_lsl:
-                continue
-            seen_lsl.add(l)
-            spec_tickvals.append(l)
-            spec_ticktext.append(f"LSL-{l:.4g}")
-
     y_range_kwargs = dict(range=custom_yrange) if custom_yrange else {}
     if use_row_facets:
         for i in range(1, n_rows + 1):
@@ -594,21 +508,9 @@ def build_combined_chart(
             ),
         )
 
-    for val, label in zip(spec_tickvals, spec_ticktext):
-        annotations.append(
-            dict(
-                x=0.0,
-                y=val,
-                xref="paper",
-                yref="y",
-                text=f"<b>{label}</b>",
-                showarrow=False,
-                xanchor="left",
-                xshift=5,
-                font=dict(size=10, color="rgba(220,38,38,0.9)", family="Arial Black"),
-                bgcolor="rgba(255,255,255,0.7)",
-            )
-        )
+    annotations.extend(
+        spec_axis_annotations(spec_spans, style=PROFILE_STYLE, deviation_mode=deviation_mode)
+    )
     fig.update_layout(annotations=annotations)
 
     # ----- Section header bands (paper coordinates) -----

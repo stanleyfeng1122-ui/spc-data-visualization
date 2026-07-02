@@ -18,6 +18,7 @@ from spc_viz.parsers import get_filtered_dim_meta
 from spc_viz.parsers.dimensions import DimensionMeta
 
 from .base import compute_row_groups, compute_sections, get_color_for_group
+from .spec_limits import BOX_STYLE, SpecSpan, render_spec_limits, spec_axis_annotations
 
 # ---------------------------------------------------------------------------
 # Chart building -- box plot
@@ -247,58 +248,15 @@ def build_box_plot(
                             )
                         )
 
-    dash_style = dict(dash="dash", width=1.2)
     row_kwargs_list = [dict(row=i + 1, col=1) for i in range(n_rows)] if use_row_facets else [{}]
-    for rk in row_kwargs_list:
-        if rep_usl is not None:
-            ref_usl = (rep_usl - rep_nom) if (deviation_mode and rep_nom is not None) else rep_usl
-            fig.add_hline(
-                y=ref_usl,
-                line=dict(color="rgba(220,38,38,0.5)", **dash_style),
-                annotation_text="USL",
-                annotation_position="top right",
-                **rk,
-            )
-        if rep_lsl is not None:
-            ref_lsl = (rep_lsl - rep_nom) if (deviation_mode and rep_nom is not None) else rep_lsl
-            fig.add_hline(
-                y=ref_lsl,
-                line=dict(color="rgba(220,38,38,0.5)", **dash_style),
-                annotation_text="LSL",
-                annotation_position="bottom right",
-                **rk,
-            )
-        if rep_nom is not None:
-            ref_nom = 0.0 if deviation_mode else rep_nom
-            fig.add_hline(
-                y=ref_nom,
-                line=dict(color="rgba(34,197,94,0.5)", dash="dot", width=1),
-                annotation_text="Nominal",
-                annotation_position="top right",
-                **rk,
-            )
-        if rep_usl is not None and rep_lsl is not None:
-            band_usl = (rep_usl - rep_nom) if (deviation_mode and rep_nom is not None) else rep_usl
-            band_lsl = (rep_lsl - rep_nom) if (deviation_mode and rep_nom is not None) else rep_lsl
-            fig.add_hrect(
-                y0=band_lsl,
-                y1=band_usl,
-                fillcolor="rgba(34, 197, 94, 0.10)",
-                line_width=0,
-                layer="below",
-                **rk,
-            )
-
-    spec_tickvals: list[float] = []
-    spec_ticktext: list[str] = []
-    if rep_usl is not None:
-        ref_usl_v = (rep_usl - rep_nom) if (deviation_mode and rep_nom is not None) else rep_usl
-        spec_tickvals.append(ref_usl_v)
-        spec_ticktext.append(f"USL-{ref_usl_v:.4g}")
-    if rep_lsl is not None:
-        ref_lsl_v = (rep_lsl - rep_nom) if (deviation_mode and rep_nom is not None) else rep_lsl
-        spec_tickvals.append(ref_lsl_v)
-        spec_ticktext.append(f"LSL-{ref_lsl_v:.4g}")
+    spec_spans = [SpecSpan(usl=rep_usl, lsl=rep_lsl, nominal=rep_nom)]
+    render_spec_limits(
+        fig,
+        spec_spans,
+        style=BOX_STYLE,
+        deviation_mode=deviation_mode,
+        rows=row_kwargs_list,
+    )
 
     # Section header bands (profile style) replace tilted x-axis section labels.
     distinct_secs = [s for s in dict.fromkeys(cat_section.values()) if s is not None]
@@ -344,21 +302,9 @@ def build_box_plot(
         template="plotly_white",
     )
 
-    spec_annotations: list[dict] = []
-    for val, label in zip(spec_tickvals, spec_ticktext):
-        spec_annotations.append(
-            dict(
-                x=0.0,
-                y=val,
-                xref="paper",
-                yref="y",
-                text=f"<b>{label}</b>",
-                showarrow=False,
-                xanchor="right",
-                font=dict(size=10, color="rgba(220,38,38,0.9)", family="Arial Black"),
-                bgcolor="rgba(255,255,255,0.7)",
-            )
-        )
+    spec_annotations = spec_axis_annotations(
+        spec_spans, style=BOX_STYLE, deviation_mode=deviation_mode
+    )
     if spec_annotations:
         existing = list(fig.layout.annotations or [])
         fig.update_layout(annotations=existing + spec_annotations)

@@ -19,6 +19,7 @@ from spc_viz.parsers import get_filtered_dim_meta
 from spc_viz.parsers.dimensions import DimensionMeta
 
 from .base import compute_row_groups, get_color_for_group
+from .spec_limits import HISTOGRAM_STYLE, SpecSpan, render_spec_limits
 
 # ---------------------------------------------------------------------------
 # Chart building -- histogram
@@ -143,31 +144,13 @@ def build_histogram(
                     fig.add_trace(trace)
 
             line_kwargs: dict = dict(row=plotly_row, col=col_idx) if use_subplots else {}
-            dash_style = dict(dash="dash", width=1.5)
-            if usl_val is not None:
-                fig.add_vline(
-                    x=usl_val,
-                    line=dict(color="rgba(220,38,38,0.7)", **dash_style),
-                    annotation_text="USL",
-                    annotation_position="top right",
-                    **line_kwargs,
-                )
-            if lsl_val is not None:
-                fig.add_vline(
-                    x=lsl_val,
-                    line=dict(color="rgba(220,38,38,0.7)", **dash_style),
-                    annotation_text="LSL",
-                    annotation_position="top left",
-                    **line_kwargs,
-                )
-            if nom_val is not None:
-                fig.add_vline(
-                    x=nom_val,
-                    line=dict(color="rgba(34,197,94,0.7)", dash="dot", width=1.2),
-                    annotation_text="Nom",
-                    annotation_position="top",
-                    **line_kwargs,
-                )
+            render_spec_limits(
+                fig,
+                [SpecSpan(usl=usl_val, lsl=lsl_val, nominal=nom_val)],
+                style=HISTOGRAM_STYLE,
+                orientation="v",
+                rows=[line_kwargs],
+            )
 
     chart_height = max(400, 300 * n_rows)
     fig.update_layout(

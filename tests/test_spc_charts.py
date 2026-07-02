@@ -1594,3 +1594,94 @@ class TestHeaderDetect:
 
         rows = self._grid(label_row=5, label_col=19)  # AP CORR style, col20
         assert _find_dim_no_cell(rows) == (6, 20)
+
+
+class TestSpecLimitsModule:
+    """The shared spec-limits module: spans in → shapes/annotations out."""
+
+    def _fig(self):
+        import plotly.graph_objects as go
+
+        return go.Figure()
+
+    def test_uniform_span_draws_band_and_two_lines(self):
+        from spc_viz.charts.spec_limits import PROFILE_STYLE, SpecSpan, render_spec_limits
+
+        fig = self._fig()
+        render_spec_limits(
+            fig, [SpecSpan(usl=0.4, lsl=-0.4, nominal=0.0)], style=PROFILE_STYLE
+        )
+        shapes = list(fig.layout.shapes or [])
+        assert len(shapes) == 3  # hrect band + USL hline + LSL hline
+        assert sum(1 for s in shapes if s.type == "rect") == 1
+        assert sum(1 for s in shapes if s.type == "line") == 2
+
+    def test_stepping_spans_draw_per_segment(self):
+        from spc_viz.charts.spec_limits import PROFILE_STYLE, SpecSpan, render_spec_limits
+
+        fig = self._fig()
+        spans = [
+            SpecSpan(usl=0.25, lsl=-0.1, nominal=0.0, x0=0.0, x1=5.0),
+            SpecSpan(usl=0.4, lsl=-0.4, nominal=0.0, x0=5.0, x1=10.0),
+        ]
+        render_spec_limits(fig, spans, style=PROFILE_STYLE)
+        shapes = list(fig.layout.shapes or [])
+        # per span: band rect + USL segment + LSL segment
+        assert len(shapes) == 6
+        seg = [s for s in shapes if s.type == "line"][0]
+        assert (seg.x0, seg.x1) == (0.0, 5.0)
+
+    def test_vertical_orientation_for_histogram(self):
+        from spc_viz.charts.spec_limits import HISTOGRAM_STYLE, SpecSpan, render_spec_limits
+
+        fig = self._fig()
+        render_spec_limits(
+            fig,
+            [SpecSpan(usl=0.65, lsl=0.45, nominal=0.55)],
+            style=HISTOGRAM_STYLE,
+            orientation="v",
+        )
+        shapes = list(fig.layout.shapes or [])
+        # no band (band_alpha=None); USL + LSL + nominal vlines
+        assert len(shapes) == 3
+        assert all(s.type == "line" for s in shapes)
+        # vlines span the y-paper domain; their x0 == x1 == the spec value
+        assert sorted(round(s.x0, 4) for s in shapes) == [0.45, 0.55, 0.65]
+
+    def test_deviation_mode_shifts_by_nominal(self):
+        from spc_viz.charts.spec_limits import PROFILE_STYLE, SpecSpan, render_spec_limits
+
+        fig = self._fig()
+        render_spec_limits(
+            fig,
+            [SpecSpan(usl=0.8, lsl=0.2, nominal=0.5)],
+            style=PROFILE_STYLE,
+            deviation_mode=True,
+        )
+        lines = [s for s in (fig.layout.shapes or []) if s.type == "line"]
+        assert sorted(round(s.y0, 6) for s in lines) == [-0.3, 0.3]
+
+    def test_axis_annotations_unique_mode_lists_all_values(self):
+        from spc_viz.charts.spec_limits import PROFILE_STYLE, SpecSpan, spec_axis_annotations
+
+        spans = [
+            SpecSpan(usl=0.25, lsl=-0.1, nominal=0.0, x0=0.0, x1=5.0),
+            SpecSpan(usl=0.4, lsl=-0.4, nominal=0.0, x0=5.0, x1=10.0),
+        ]
+        anns = spec_axis_annotations(spans, style=PROFILE_STYLE)
+        texts = [a["text"] for a in anns]
+        # USL descending, then LSL ascending, raw values
+        assert texts == ["<b>USL-0.4</b>", "<b>USL-0.25</b>", "<b>LSL--0.4</b>", "<b>LSL--0.1</b>"]
+
+    def test_axis_annotations_rep_and_none_modes(self):
+        from spc_viz.charts.spec_limits import (
+            BOX_STYLE,
+            HISTOGRAM_STYLE,
+            SpecSpan,
+            spec_axis_annotations,
+        )
+
+        span = [SpecSpan(usl=1.0, lsl=0.0, nominal=0.5)]
+        rep = spec_axis_annotations(span, style=BOX_STYLE)
+        assert len(rep) == 2 and rep[0]["text"] == "<b>USL-1</b>"
+        assert spec_axis_annotations(span, style=HISTOGRAM_STYLE) == []

@@ -2,66 +2,16 @@
 
 from __future__ import annotations
 
-from collections import Counter, OrderedDict
+from collections import OrderedDict
 
 import streamlit as st
 
 from spc_viz.parsers import detect_dimension_groups, get_filtered_dim_meta
+from spc_viz.parsers.dataset import build_display_labels as build_display_map
 from spc_viz.parsers.dimensions import DimensionMeta
 from spc_viz.parsers.pairing import is_paired_dim_id
 
-
-def _dimension_display_label(dno: str, dmeta: DimensionMeta) -> str:
-    if is_paired_dim_id(dno):
-        ids = " / ".join(dmeta.source_dim_nos or [])
-        if ids and dmeta.description:
-            return f"{ids} — {dmeta.description}"
-        return ids or dmeta.description or dno
-    return f"{dno} — {dmeta.description}" if dmeta.description else dno
-
-
-def _bubble_ids(dno: str, dmeta: DimensionMeta) -> list[str]:
-    """Source SPC bubble id(s) for a dimension: the paired sources, else dno."""
-    if is_paired_dim_id(dno):
-        return list(dmeta.source_dim_nos or [])
-    return [dno]
-
-
-def build_display_map(all_dimensions: OrderedDict[str, DimensionMeta]) -> OrderedDict[str, str]:
-    """Map ``dno -> unique display label``.
-
-    Two genuinely different dimensions can share a description (e.g. SPC_CY and
-    SPC_CW both "Top ply corrugate bottom to datum A offset"). A plain
-    description label would collide and hide one in the picker, so when 2+
-    dimensions share a label we append ``(bubble id · point span)`` — falling
-    back to the span alone for paired dims that span more than one bubble id.
-    Labels that don't collide stay clean.
-    """
-    base = {dno: _dimension_display_label(dno, dm) for dno, dm in all_dimensions.items()}
-    collisions = {lbl for lbl, n in Counter(base.values()).items() if n > 1}
-
-    out: OrderedDict[str, str] = OrderedDict()
-    used: set[str] = set()
-    for dno, dm in all_dimensions.items():
-        label = base[dno]
-        if label in collisions:
-            pts = [str(p).strip() for p in dm.point_numbers]
-            span = f"{pts[0]}–{pts[-1]}" if pts else ""
-            ids = _bubble_ids(dno, dm)
-            if len(ids) == 1 and span:
-                label = f"{label} ({ids[0]} · {span})"
-            elif len(ids) == 1:
-                label = f"{label} ({ids[0]})"
-            elif span:
-                label = f"{label} ({span})"
-        # Guarantee uniqueness even if a suffix still collides.
-        unique, n = label, 2
-        while unique in used:
-            unique = f"{label} #{n}"
-            n += 1
-        used.add(unique)
-        out[dno] = unique
-    return out
+__all__ = ["build_display_map", "build_dimension_selector", "build_point_filter"]
 
 
 def _dimension_group_label(dno: str, dmeta: DimensionMeta) -> str:

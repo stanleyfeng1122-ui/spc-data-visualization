@@ -10,6 +10,7 @@ from __future__ import annotations
 # Activate openpyxl ExternalReference patch as a side effect of importing
 # the package (parity with the original spc_parser module behaviour).
 from . import openpyxl_patch  # noqa: F401
+from .dataset import SpcDataset, build_display_labels, load_dataset
 from .dimensions import (
     DimensionMeta,
     ParsedFile,
@@ -56,6 +57,9 @@ __all__ = [
     # Public API
     "DimensionMeta",
     "ParsedFile",
+    "SpcDataset",
+    "build_display_labels",
+    "load_dataset",
     "parse_excel",
     "parse_excel_multi",
     "PAIR_DIM_PREFIX",

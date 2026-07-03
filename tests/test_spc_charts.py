@@ -1625,6 +1625,55 @@ class TestHeaderDetect:
         assert _find_dim_no_cell(rows) == (6, 20)
 
 
+class TestSpcDataset:
+    """The deep parse-result module: load once, everything behind one seam."""
+
+    def _fixture_paths(self):
+        base = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures")
+        return [
+            os.path.join(base, "FX_X3745.xlsx"),
+            os.path.join(base, "LK_X3745.xlsx"),
+        ]
+
+    def _load(self):
+        from spc_viz.parsers import load_dataset
+
+        return load_dataset([(p, ("Raw data",)) for p in self._fixture_paths()])
+
+    def test_load_builds_dimensions_and_meta(self):
+        ds = self._load()
+        assert len(ds.dimensions) > 0
+        assert len(ds.parsed_files) >= 2  # both fixtures parsed
+        assert len(ds.meta_columns) > 0
+
+    def test_display_labels_unique_and_carry_bubble_ids(self):
+        ds = self._load()
+        labels = ds.display_labels()
+        assert len(set(labels.values())) == len(labels)
+        # Every SPC-bubbled dimension shows its id (junk vendor ids like "/"
+        # simply show whatever id they have).
+        spc = [lbl for dno, lbl in labels.items() if "SPC_" in dno]
+        assert spc and all("SPC_" in lbl for lbl in spc)
+
+    def test_combined_matches_prepare_combined_data(self):
+        from spc_viz.charts import prepare_combined_data
+
+        ds = self._load()
+        dno = next(iter(ds.dimensions))
+        df, metas = ds.combined([dno])
+        df2, metas2 = prepare_combined_data(ds.parsed_files, [dno])
+        assert df is not None and len(df) == len(df2)
+        assert list(metas) == list(metas2)
+        assert "_factory" in df.columns and "Source Level" in df.columns
+
+    def test_unparseable_source_is_skipped(self):
+        from spc_viz.parsers import load_dataset
+
+        good = self._fixture_paths()[0]
+        ds = load_dataset([("/nonexistent/nope.xlsx", ("Raw data",)), (good, ("Raw data",))])
+        assert len(ds.parsed_files) >= 1  # bad source skipped, good one parsed
+
+
 class TestSettleGate:
     """Pure timing logic behind the multi-pick settle gate."""
 

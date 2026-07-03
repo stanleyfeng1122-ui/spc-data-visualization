@@ -37,7 +37,7 @@ report the failure with output, leave the working tree for inspection.
       `parsers.pairing._detect_source_level`/`_detect_source_condition`
       (re-export from pairing under the public names if needed). Pure
       dedup — zero behavior change.
-- [ ] C1-2. Introduce the deep module: `parsers/dataset.py` with
+- [x] C1-2. (2026-07-03) Introduce the deep module: `parsers/dataset.py` with
       `SpcDataset` and `load_dataset(sources, sheet_names) -> SpcDataset`.
       It owns: per-sheet parsing (`parse_excel_multi`), the parsed-file
       records (dicts stay INTERNAL), `build_paired_dimension_map`, source

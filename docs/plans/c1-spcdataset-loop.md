@@ -32,7 +32,7 @@ report the failure with output, leave the working tree for inspection.
 
 ## C1 increments (in order; each is one iteration)
 
-- [ ] C1-1. Deduplicate level/condition detection: `charts/base.py`
+- [x] C1-1. (2026-07-03) Deduplicate level/condition detection: `charts/base.py`
       `_source_level`/`_source_condition` become imports of
       `parsers.pairing._detect_source_level`/`_detect_source_condition`
       (re-export from pairing under the public names if needed). Pure

@@ -17,6 +17,8 @@ from scipy import stats as scipy_stats
 
 from spc_viz.parsers.pairing import (
     SOURCE_META_COLUMNS,
+    detect_source_condition,
+    detect_source_level,
     is_paired_dim_id,
 )
 
@@ -160,24 +162,6 @@ def _canonical_meta_for_target(pf: dict, target_dno: str, local_dno: str) -> obj
     return pf["dimensions"][local_dno]
 
 
-def _source_level(sheet_name: str) -> str:
-    text = f" {str(sheet_name).upper()} "
-    if re.search(r"(^|[^A-Z])PP([^A-Z]|$)", text):
-        return "PP"
-    if re.search(r"(^|[^A-Z])AP([^A-Z]|$)", text):
-        return "AP"
-    return "Unknown"
-
-
-def _source_condition(sheet_name: str) -> str:
-    text = str(sheet_name).upper()
-    if "CORR" in text:
-        return "CORR"
-    if "POR" in text:
-        return "POR"
-    return "Unknown"
-
-
 def prepare_combined_data(
     parsed_files: list[dict],
     dim_nos: list[str],
@@ -207,8 +191,8 @@ def prepare_combined_data(
         df["_source_file"] = pf["filename"]
         sheet_name = pf.get("sheet_name") or "Unknown"
         df["Source Sheet"] = sheet_name
-        df["Source Level"] = _source_level(sheet_name)
-        df["Source Condition"] = _source_condition(sheet_name)
+        df["Source Level"] = detect_source_level(sheet_name)
+        df["Source Condition"] = detect_source_condition(sheet_name)
 
         meta_cols = [c for c in pf["meta_columns"] if c in df.columns]
         for col in SOURCE_META_COLUMNS:

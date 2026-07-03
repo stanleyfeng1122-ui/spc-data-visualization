@@ -40,8 +40,9 @@ def _point_signature(dmeta: DimensionMeta) -> tuple[str, ...]:
     return tuple(str(point).strip() for point in dmeta.point_numbers)
 
 
-def _detect_source_level(sheet_name: str) -> str:
-    text = f" {sheet_name.upper()} "
+def detect_source_level(sheet_name: str) -> str:
+    """PP / AP level a sheet's data comes from, detected from its name."""
+    text = f" {str(sheet_name).upper()} "
     if re.search(r"(^|[^A-Z])PP([^A-Z]|$)", text):
         return "PP"
     if re.search(r"(^|[^A-Z])AP([^A-Z]|$)", text):
@@ -49,8 +50,9 @@ def _detect_source_level(sheet_name: str) -> str:
     return "Unknown"
 
 
-def _detect_source_condition(sheet_name: str) -> str:
-    text = sheet_name.upper()
+def detect_source_condition(sheet_name: str) -> str:
+    """POR / CORR condition a sheet covers, detected from its name."""
+    text = str(sheet_name).upper()
     if "CORR" in text:
         return "CORR"
     if "POR" in text:
@@ -102,8 +104,8 @@ def _add_source_metadata(parsed_file: dict) -> None:
         return
 
     sheet_name = parsed_file.get("sheet_name") or ""
-    source_level = _detect_source_level(sheet_name)
-    source_condition = _detect_source_condition(sheet_name)
+    source_level = detect_source_level(sheet_name)
+    source_condition = detect_source_condition(sheet_name)
 
     data["Source Sheet"] = sheet_name or "Unknown"
     data["Source Level"] = source_level
@@ -139,7 +141,7 @@ def build_paired_dimension_map(parsed_files: list[dict]) -> OrderedDict[str, Dim
 
     for (feature_name, points), members in groups.items():
         distinct_dims = {m["dim_no"] for m in members}
-        levels = {_detect_source_level(m["sheet_name"] or "") for m in members}
+        levels = {detect_source_level(m["sheet_name"] or "") for m in members}
         # Bubble ids seen within each sheet. Two DIFFERENT bubble ids in ONE
         # sheet that share a description (e.g. SPC_GS and SPC_GU both in a PP
         # sheet) are genuinely different features the vendor named alike — never

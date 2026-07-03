@@ -17,7 +17,7 @@ Chart model (combined profile view):
 import streamlit as st
 import streamlit.components.v1 as components
 
-from spc_viz.parsers import _open_workbook, build_paired_dimension_map, parse_excel_multi
+from spc_viz.parsers import _open_workbook, assemble_dataset, parse_sheets
 from spc_viz.theme import inject_theme
 from spc_viz.ui import (
     build_and_render_chart,
@@ -180,32 +180,12 @@ with st.sidebar.expander("Sheet / File map", expanded=False):
 
 @st.cache_data(show_spinner="Parsing Excel files...")
 def _parse_file_sheets(file_bytes: bytes, filename: str, sheet_names: tuple) -> list:
-    """Parse specific sheets from a file and return list of dicts."""
+    """Parse specific sheets from one file (cached per file + sheet set)."""
     import io
 
-    results = []
-    for sn in sheet_names:
-        try:
-            buf = io.BytesIO(file_bytes)
-            buf.name = filename
-            parsed_list = parse_excel_multi(buf, sheet_name=sn)
-            for parsed in parsed_list:
-                results.append(
-                    {
-                        "filename": parsed.filename,
-                        "sheet_name": parsed.sheet_name,
-                        "part_number": parsed.part_number,
-                        "part_description": parsed.part_description,
-                        "revision": parsed.revision,
-                        "factory": parsed.factory,
-                        "dimensions": parsed.dimensions,
-                        "data": parsed.data,
-                        "meta_columns": parsed.meta_columns,
-                    }
-                )
-        except Exception:
-            pass
-    return results
+    buf = io.BytesIO(file_bytes)
+    buf.name = filename
+    return parse_sheets(buf, sheet_names)
 
 
 parsed_files = []
@@ -244,9 +224,11 @@ with st.sidebar.expander(f"Loaded Files ({len(parsed_files)})", expanded=False):
         )
 
 # ---------------------------------------------------------------------------
-# Build unified dimension map, pairing PP/AP bubbles that share feature + points
+# Assemble the dataset: pairing + source metadata behind the parsers seam
 # ---------------------------------------------------------------------------
-all_dimensions = build_paired_dimension_map(parsed_files)
+dataset = assemble_dataset(parsed_files)
+all_dimensions = dataset.dimensions
+parsed_files = dataset.parsed_files
 
 # ---------------------------------------------------------------------------
 # Shared controls (dimension selection, chart type, grouping, etc.)

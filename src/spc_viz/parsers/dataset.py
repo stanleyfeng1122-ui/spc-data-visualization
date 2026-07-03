@@ -125,35 +125,59 @@ class SpcDataset:
         return prepare_combined_data(self._parsed_files, dim_nos)
 
 
+def parse_sheets(source: FileOrPath, sheet_names: tuple[str, ...]) -> list[dict]:
+    """Parse the requested sheets of ONE source into raw parsed-file records.
+
+    This is the cache-friendly stage: callers may wrap it in ``st.cache_data``
+    per file so unchanged files skip reparsing. The returned records are
+    opaque tokens meant only to be fed into :func:`assemble_dataset` — do not
+    index into them. Sheets that fail to parse are skipped (historical app
+    behavior).
+    """
+    parsed_files: list[dict] = []
+    for sheet_name in sheet_names:
+        # In-memory buffers are consumed by openpyxl; rewind between sheets.
+        if hasattr(source, "seek"):
+            source.seek(0)
+        try:
+            results = parse_excel_multi(source, sheet_name=sheet_name)
+        except Exception:
+            continue
+        for p in results:
+            parsed_files.append(
+                {
+                    "filename": p.filename,
+                    "sheet_name": p.sheet_name,
+                    "part_number": p.part_number,
+                    "part_description": p.part_description,
+                    "revision": p.revision,
+                    "factory": p.factory,
+                    "dimensions": p.dimensions,
+                    "data": p.data,
+                    "meta_columns": p.meta_columns,
+                }
+            )
+    return parsed_files
+
+
+def assemble_dataset(parsed_files: list[dict]) -> SpcDataset:
+    """Build one SpcDataset from the records of all sources together.
+
+    Pairing must see every source at once (same-bubble across files, PP/AP
+    across sheets), which is why this stage is separate from the per-source
+    :func:`parse_sheets`.
+    """
+    dimensions = build_paired_dimension_map(parsed_files)
+    return SpcDataset(dimensions=dimensions, _parsed_files=parsed_files)
+
+
 def load_dataset(sources: list[tuple[FileOrPath, tuple[str, ...]]]) -> SpcDataset:
     """Parse the requested sheets of each source and build one SpcDataset.
 
     ``sources`` is a list of ``(file_or_path, sheet_names)`` pairs — a path or
-    in-memory buffer plus the sheet names to parse from it. Sheets that fail
-    to parse are skipped (matching the app's historical behavior); pairing
-    and source metadata are applied before the dataset is returned.
+    in-memory buffer plus the sheet names to parse from it.
     """
     parsed_files: list[dict] = []
     for source, sheet_names in sources:
-        for sheet_name in sheet_names:
-            try:
-                results = parse_excel_multi(source, sheet_name=sheet_name)
-            except Exception:
-                continue
-            for p in results:
-                parsed_files.append(
-                    {
-                        "filename": p.filename,
-                        "sheet_name": p.sheet_name,
-                        "part_number": p.part_number,
-                        "part_description": p.part_description,
-                        "revision": p.revision,
-                        "factory": p.factory,
-                        "dimensions": p.dimensions,
-                        "data": p.data,
-                        "meta_columns": p.meta_columns,
-                    }
-                )
-
-    dimensions = build_paired_dimension_map(parsed_files)
-    return SpcDataset(dimensions=dimensions, _parsed_files=parsed_files)
+        parsed_files.extend(parse_sheets(source, sheet_names))
+    return assemble_dataset(parsed_files)

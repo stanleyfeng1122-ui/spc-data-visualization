@@ -46,7 +46,7 @@ report the failure with output, leave the working tree for inspection.
       here), `.meta_columns`, `.combined(dim_nos)` →
       `prepare_combined_data` result. Unit tests against
       `examples/*.xlsx` fixtures. No caller migrates yet.
-- [ ] C1-3. Migrate `app.py`: the dict-building block + sheet parse loop
+- [x] C1-3. (2026-07-03) Migrate `app.py`: the dict-building block + sheet parse loop
       call `load_dataset`; `st.cache_data` wraps the loader. Behavior
       identical (snapshot hash gate applies).
 - [ ] C1-4. Migrate `pages/1_Quick_Test.py` the same way.

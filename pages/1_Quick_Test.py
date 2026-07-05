@@ -114,26 +114,24 @@ if not parsed_files:
     st.warning("No .xlsx files found or none could be parsed.")
     st.stop()
 
-# Loaded files summary
-st.sidebar.markdown("---")
-with st.sidebar.expander(f"Files ({len(parsed_files)})", expanded=False):
-    for pf in parsed_files:
-        n_rows = len(pf["data"]) if pf["data"] is not None else 0
-        factory = pf.get("factory", "?")
-        st.markdown(
-            f"`{pf['filename']}`  \n"
-            f"<span style='font-size:0.72rem;color:{TEXT_MUTED}'>"
-            f"{factory} / {pf['part_number']} / {n_rows} rows"
-            f"</span>",
-            unsafe_allow_html=True,
-        )
-
 # ---------------------------------------------------------------------------
 # Assemble the dataset: pairing + source metadata behind the parsers seam
 # ---------------------------------------------------------------------------
 dataset = assemble_dataset(parsed_files)
 all_dimensions = dataset.dimensions
-parsed_files = dataset.parsed_files
+summaries = dataset.file_summaries()
+
+# Loaded files summary
+st.sidebar.markdown("---")
+with st.sidebar.expander(f"Files ({len(summaries)})", expanded=False):
+    for s in summaries:
+        st.markdown(
+            f"`{s['filename']}`  \n"
+            f"<span style='font-size:0.72rem;color:{TEXT_MUTED}'>"
+            f"{s['factory']} / {s['part_number']} / {s['n_rows']} rows"
+            f"</span>",
+            unsafe_allow_html=True,
+        )
 
 # ---------------------------------------------------------------------------
 # Shared controls
@@ -144,7 +142,7 @@ selected_dim_nos, selected_group_label, _ = build_dimension_selector(all_dimensi
 exclude_intervals, selected_points = build_point_filter(
     all_dimensions, selected_dim_nos, key_prefix=KP
 )
-controls = build_chart_controls(parsed_files, key_prefix=KP)
+controls = build_chart_controls(dataset, key_prefix=KP)
 
 # ---------------------------------------------------------------------------
 # MAIN AREA — chart + analysis
@@ -156,7 +154,7 @@ with hdr_left:
     st.markdown(
         f"<h1 style='margin:0;padding:0;font-size:1.3rem;'>{selected_group_label or 'SPC Analysis'}</h1>"
         f"<span style='font-size:0.75rem;color:{TEXT_MUTED};font-family:{FONT_MONO};'>"
-        f"{len(parsed_files)} file{'s' if len(parsed_files) != 1 else ''} / "
+        f"{len(summaries)} file{'s' if len(summaries) != 1 else ''} / "
         f"{controls.chart_type} / {controls.color_by}"
         f"</span>",
         unsafe_allow_html=True,
@@ -168,8 +166,8 @@ settle(
     (tuple(selected_dim_nos), exclude_intervals, tuple(selected_points or ()), controls),
 )
 
-df_clean, dim_metas, _ = prepare_and_clean(parsed_files, selected_dim_nos)
-df_clean, active_filters = build_data_filters(parsed_files, df_clean, key_prefix=KP)
+df_clean, dim_metas, _ = prepare_and_clean(dataset, selected_dim_nos)
+df_clean, active_filters = build_data_filters(dataset, df_clean, key_prefix=KP)
 
 custom_color_map = build_color_pickers(df_clean, controls.color_by, key_prefix=KP)
 

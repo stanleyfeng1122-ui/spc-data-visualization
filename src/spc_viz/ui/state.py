@@ -13,7 +13,7 @@ from typing import Literal
 import pandas as pd
 import streamlit as st
 
-from spc_viz.charts import prepare_combined_data
+from spc_viz.parsers.dataset import SpcDataset
 from spc_viz.parsers.dimensions import DimensionMeta
 
 # ---------------------------------------------------------------------------
@@ -88,7 +88,7 @@ def settle(key: str, value: object, delay: float = SETTLE_SECONDS) -> None:
 
 
 def prepare_and_clean(
-    parsed_files: list[dict],
+    dataset: SpcDataset,
     selected_dim_nos: list[str],
 ) -> tuple[pd.DataFrame, OrderedDict[str, DimensionMeta], list[str]]:
     """Combine data and drop all-NaN rows.
@@ -96,10 +96,12 @@ def prepare_and_clean(
     Returns (df_clean, dim_metas, all_meas_cols).
     Calls ``st.stop()`` and emits a warning when data is missing.
     """
-    df, dim_metas = prepare_combined_data(parsed_files, selected_dim_nos)
+    df, dim_metas = dataset.combined(selected_dim_nos)
     if df is None or dim_metas is None or df.empty:
         st.warning("No data found for selected dimensions.")
         st.stop()
+    # st.stop() raises, so this only narrows the Optionals for type checking.
+    assert df is not None and dim_metas is not None
 
     all_meas_cols: list[str] = []
     for dno in selected_dim_nos:

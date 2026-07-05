@@ -204,31 +204,27 @@ if not parsed_files:
     st.stop()
 
 # ---------------------------------------------------------------------------
-# File summaries
-# ---------------------------------------------------------------------------
-st.sidebar.markdown("---")
-with st.sidebar.expander(f"Loaded Files ({len(parsed_files)})", expanded=False):
-    for pf in parsed_files:
-        n_rows = len(pf["data"]) if pf["data"] is not None else 0
-        n_dims = len(pf["dimensions"])
-        factory = pf.get("factory", "?")
-        sheet_label = f" [{pf['sheet_name']}]" if pf.get("sheet_name") else ""
-        meta_info = f"{n_dims} dims, {n_rows} rows"
-        if pf["data"] is not None and "CFG" in pf["data"].columns:
-            cfgs = ", ".join(sorted(pf["data"]["CFG"].dropna().unique().astype(str)[:5]))
-            meta_info += f", CFG: {cfgs}"
-        st.markdown(
-            f"`{pf['filename'][:35]}...`{sheet_label}  \n"
-            f"<span style='font-size:0.7rem;color:#737373;'>{meta_info}</span>",
-            unsafe_allow_html=True,
-        )
-
-# ---------------------------------------------------------------------------
 # Assemble the dataset: pairing + source metadata behind the parsers seam
 # ---------------------------------------------------------------------------
 dataset = assemble_dataset(parsed_files)
 all_dimensions = dataset.dimensions
-parsed_files = dataset.parsed_files
+
+# ---------------------------------------------------------------------------
+# File summaries
+# ---------------------------------------------------------------------------
+summaries = dataset.file_summaries()
+st.sidebar.markdown("---")
+with st.sidebar.expander(f"Loaded Files ({len(summaries)})", expanded=False):
+    for s in summaries:
+        sheet_label = f" [{s['sheet_name']}]" if s["sheet_name"] else ""
+        meta_info = f"{s['n_dims']} dims, {s['n_rows']} rows"
+        if s["cfg_values"]:
+            meta_info += f", CFG: {', '.join(s['cfg_values'])}"
+        st.markdown(
+            f"`{s['filename'][:35]}...`{sheet_label}  \n"
+            f"<span style='font-size:0.7rem;color:#737373;'>{meta_info}</span>",
+            unsafe_allow_html=True,
+        )
 
 # ---------------------------------------------------------------------------
 # Shared controls (dimension selection, chart type, grouping, etc.)
@@ -239,7 +235,7 @@ selected_dim_nos, selected_group_label, _ = build_dimension_selector(all_dimensi
 exclude_intervals, selected_points = build_point_filter(
     all_dimensions, selected_dim_nos, key_prefix=KP
 )
-controls = build_chart_controls(parsed_files, key_prefix=KP)
+controls = build_chart_controls(dataset, key_prefix=KP)
 
 # ---------------------------------------------------------------------------
 # Main content area
@@ -252,8 +248,8 @@ settle(
     (tuple(selected_dim_nos), exclude_intervals, tuple(selected_points or ()), controls),
 )
 
-df_clean, dim_metas, _ = prepare_and_clean(parsed_files, selected_dim_nos)
-df_clean, active_filters = build_data_filters(parsed_files, df_clean, key_prefix=KP)
+df_clean, dim_metas, _ = prepare_and_clean(dataset, selected_dim_nos)
+df_clean, active_filters = build_data_filters(dataset, df_clean, key_prefix=KP)
 
 custom_color_map = build_color_pickers(df_clean, controls.color_by, key_prefix=KP)
 

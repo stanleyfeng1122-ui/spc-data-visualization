@@ -53,7 +53,7 @@ report the failure with output, leave the working tree for inspection.
 - [x] C1-5. (2026-07-05) Migrate `ui/batch_export.py` onto the dataset's
       `.combined(...)` path so export parity with the main chart is by
       construction (absorbs review candidate C5).
-- [ ] C1-6. Close the seam: grep gate — no `pf["` / `pf.get(` outside
+- [x] C1-6. (2026-07-05) Close the seam: grep gate — no `pf["` / `pf.get(` outside
       `src/spc_viz/parsers/`; delete now-dead dict plumbing; add the
       `SpcDataset` term to CONTEXT.md; restart the launchd app
       (`launchctl kickstart -k gui/$UID/com.spc.data-visualization`, poll

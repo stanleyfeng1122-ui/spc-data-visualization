@@ -1468,8 +1468,7 @@ class TestDataFilters:
                 "val": [1.0, 2.0],
             }
         )
-        parsed = [{"meta_columns": ["CFG", "Factory", "SN"]}]
-        assert _filterable_fields(parsed, df) == ["CFG"]
+        assert _filterable_fields(["CFG", "Factory", "SN"], df) == ["CFG"]
 
 
 class TestBubbleIdReuse:

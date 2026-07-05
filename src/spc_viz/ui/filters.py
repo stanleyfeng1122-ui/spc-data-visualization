@@ -19,19 +19,15 @@ from pandas import DataFrame
 _NON_FILTER_FIELDS = {"Start Point", "SN"}
 
 
-def _filterable_fields(parsed_files: list[dict], df: DataFrame) -> list[str]:
+def _filterable_fields(meta_columns: list[str], df: DataFrame) -> list[str]:
     """Metadata fields present in ``df`` with more than one distinct value.
 
     Mirrors the metadata-column source used by the grouping controls so the
     filter offers the same set of factors. A field with a single distinct
     value is omitted because filtering on it can't change the view.
     """
-    available: set[str] = set()
-    for pf in parsed_files:
-        available.update(pf["meta_columns"])
-
     fields: list[str] = []
-    for col in sorted(available - _NON_FILTER_FIELDS):
+    for col in sorted(set(meta_columns) - _NON_FILTER_FIELDS):
         if col in df.columns and df[col].dropna().nunique() > 1:
             fields.append(col)
     return fields
@@ -54,7 +50,7 @@ def apply_data_filters(df: DataFrame, filters: dict[str, list[str]]) -> DataFram
 
 
 def build_data_filters(
-    parsed_files: list[dict],
+    dataset,
     df_clean: DataFrame,
     key_prefix: str = "",
 ) -> tuple[DataFrame, dict[str, list[str]]]:
@@ -69,7 +65,7 @@ def build_data_filters(
     st.sidebar.markdown("---")
     st.sidebar.subheader("Filter")
 
-    fields = _filterable_fields(parsed_files, df_clean)
+    fields = _filterable_fields(dataset.meta_columns, df_clean)
     if not fields:
         st.sidebar.caption("No multi-value factors to filter on.")
         return df_clean, {}

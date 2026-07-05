@@ -34,3 +34,9 @@ docs, and commit messages; don't invent synonyms.
   specs through that one module.
 - **Factory / vendor code** — short site prefix (FXJS, FXVN, LK…) detected
   from vendor serial numbers or the filename.
+- **SpcDataset** — the one deep interface over everything parsed from the
+  uploaded workbooks (`parsers/dataset.py`): `load_dataset`/`parse_sheets` +
+  `assemble_dataset` own parsing, pairing and source metadata; the app layer
+  consumes `.dimensions`, `.display_labels()`, `.meta_columns`,
+  `.combined(dim_nos)` and `.file_summaries()` and never touches the raw
+  parsed-file records.

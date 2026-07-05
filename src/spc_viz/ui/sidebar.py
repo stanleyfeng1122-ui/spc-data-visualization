@@ -6,6 +6,7 @@ import streamlit as st
 from pandas import DataFrame
 
 from spc_viz.charts import get_color_for_group
+from spc_viz.parsers.dataset import SpcDataset
 
 from .state import ChartControls
 
@@ -31,7 +32,7 @@ SECTION_FIELDS = [
 ]
 
 
-def build_chart_controls(parsed_files: list[dict], key_prefix: str = "") -> ChartControls:
+def build_chart_controls(dataset: SpcDataset, key_prefix: str = "") -> ChartControls:
     """Render chart-type, grouping, and Y-axis controls.
 
     Returns a :class:`ChartControls` dataclass with keys: chart_type,
@@ -49,9 +50,7 @@ def build_chart_controls(parsed_files: list[dict], key_prefix: str = "") -> Char
     chart_type = _CHART_MAP[chart_label]
 
     # Determine available metadata columns
-    available_meta: set[str] = set()
-    for pf in parsed_files:
-        available_meta.update(pf["meta_columns"])
+    available_meta: set[str] = set(dataset.meta_columns)
     available_meta.discard("Start Point")
 
     st.sidebar.markdown("---")

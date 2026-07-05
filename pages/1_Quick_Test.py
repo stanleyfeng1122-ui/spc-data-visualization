@@ -17,7 +17,7 @@ if _project_root not in sys.path:
     sys.path.insert(0, _project_root)
 
 from spc_viz.config.paths import EXAMPLES_DIR
-from spc_viz.parsers import build_paired_dimension_map, parse_excel_multi
+from spc_viz.parsers import assemble_dataset, parse_sheets
 from spc_viz.theme import FONT_MONO, TEXT_MUTED, inject_theme
 
 # After R8, sample xlsx files live in examples/ rather than the repo root
@@ -58,25 +58,7 @@ def load_local_files(data_dir: str, sheet: str):
         [f for f in os.listdir(data_dir) if f.endswith(".xlsx") and not f.startswith("~$")]
     )
     for fname in xlsx_files:
-        fpath = os.path.join(data_dir, fname)
-        try:
-            parsed_list = parse_excel_multi(fpath, sheet_name=sheet)
-            for parsed in parsed_list:
-                results.append(
-                    {
-                        "filename": parsed.filename,
-                        "sheet_name": parsed.sheet_name,
-                        "part_number": parsed.part_number,
-                        "part_description": parsed.part_description,
-                        "revision": parsed.revision,
-                        "factory": parsed.factory,
-                        "dimensions": parsed.dimensions,
-                        "data": parsed.data,
-                        "meta_columns": parsed.meta_columns,
-                    }
-                )
-        except Exception as e:
-            st.sidebar.error(f"Error parsing {fname}: {e}")
+        results.extend(parse_sheets(os.path.join(data_dir, fname), (sheet,)))
     return results
 
 
@@ -147,9 +129,11 @@ with st.sidebar.expander(f"Files ({len(parsed_files)})", expanded=False):
         )
 
 # ---------------------------------------------------------------------------
-# Build unified dimension map, pairing PP/AP bubbles that share feature + points
+# Assemble the dataset: pairing + source metadata behind the parsers seam
 # ---------------------------------------------------------------------------
-all_dimensions = build_paired_dimension_map(parsed_files)
+dataset = assemble_dataset(parsed_files)
+all_dimensions = dataset.dimensions
+parsed_files = dataset.parsed_files
 
 # ---------------------------------------------------------------------------
 # Shared controls

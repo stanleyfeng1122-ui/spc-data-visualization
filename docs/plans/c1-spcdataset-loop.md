@@ -49,7 +49,7 @@ report the failure with output, leave the working tree for inspection.
 - [x] C1-3. (2026-07-03) Migrate `app.py`: the dict-building block + sheet parse loop
       call `load_dataset`; `st.cache_data` wraps the loader. Behavior
       identical (snapshot hash gate applies).
-- [ ] C1-4. Migrate `pages/1_Quick_Test.py` the same way.
+- [x] C1-4. (2026-07-05) Migrate `pages/1_Quick_Test.py` the same way.
 - [ ] C1-5. Migrate `ui/batch_export.py` onto the dataset's
       `.combined(...)` path so export parity with the main chart is by
       construction (absorbs review candidate C5).

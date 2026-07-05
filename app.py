@@ -330,8 +330,7 @@ if controls.chart_type == "Combined Profile":
 # Batch Chart Export
 # ---------------------------------------------------------------------------
 render_batch_export(
-    all_dimensions,
-    parsed_files,
+    dataset,
     controls,
     exclude_intervals,
     selected_points,

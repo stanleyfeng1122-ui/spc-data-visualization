@@ -6,18 +6,16 @@ from collections import OrderedDict
 
 import streamlit as st
 
-from spc_viz.parsers.dimensions import DimensionMeta
+from spc_viz.parsers.dataset import SpcDataset
 from spc_viz.parsers.pairing import is_paired_dim_id
 
 from .chart_view import _build_chart_figure
-from .dimension_picker import build_display_map
 from .filters import apply_data_filters
-from .state import ChartControls, prepare_and_clean
+from .state import ChartControls
 
 
 def render_batch_export(
-    all_dimensions: OrderedDict[str, DimensionMeta],
-    parsed_files: list[dict],
+    dataset: SpcDataset,
     controls: ChartControls,
     exclude_intervals: bool,
     selected_points: list[str] | None,
@@ -27,18 +25,18 @@ def render_batch_export(
 ) -> None:
     """Sidebar expander that batch-exports one chart per selected dimension.
 
-    ``data_filters`` is the active sidebar filter spec; when provided, each
-    exported chart is narrowed to the same factor values as the on-screen
-    chart so the ZIP matches what the user is looking at.
+    Data comes from ``dataset.combined(...)`` — the same path the on-screen
+    chart uses — so export parity holds by construction. ``data_filters`` is
+    the active sidebar filter spec; when provided, each exported chart is
+    narrowed to the same factor values as the on-screen chart.
     """
     import io
     import re
     import zipfile
 
-    from streamlit.runtime.scriptrunner import StopException
-
+    all_dimensions = dataset.dimensions
     dim_display_map: OrderedDict[str, str] = OrderedDict(
-        (label, dno) for dno, label in build_display_map(all_dimensions).items()
+        (label, dno) for dno, label in dataset.display_labels().items()
     )
 
     with st.sidebar.expander("Batch Chart Export", expanded=False):
@@ -74,18 +72,27 @@ def render_batch_export(
                 text=f"Generating {dno} ({idx + 1}/{len(batch_dims)})…",
             )
 
-            # Build data for this single dimension
-            try:
-                df_clean, dim_metas, _ = prepare_and_clean(parsed_files, [dno])
-            except (StopException, Exception):
+            # Build data for this single dimension via the dataset seam.
+            df, dim_metas = dataset.combined([dno])
+            if df is None or dim_metas is None or df.empty:
                 skipped.append(dno)
                 continue
+            meas_cols = (
+                [c for c in dim_metas[dno].col_labels if c in df.columns]
+                if dno in dim_metas
+                else []
+            )
+            df_clean = (
+                df.dropna(subset=meas_cols, how="all").reset_index(drop=True)
+                if meas_cols
+                else df
+            )
 
             # Apply the same sidebar filter the on-screen chart uses.
             if data_filters:
                 df_clean = apply_data_filters(df_clean, data_filters)
 
-            if df_clean is None or df_clean.empty:
+            if df_clean.empty:
                 skipped.append(dno)
                 continue
 

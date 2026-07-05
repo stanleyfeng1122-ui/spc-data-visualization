@@ -189,8 +189,7 @@ build_and_render_chart(
 # Batch Chart Export
 # ---------------------------------------------------------------------------
 render_batch_export(
-    all_dimensions,
-    parsed_files,
+    dataset,
     controls,
     exclude_intervals,
     selected_points,

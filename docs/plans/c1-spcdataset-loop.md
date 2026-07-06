@@ -24,7 +24,7 @@ report the failure with output, leave the working tree for inspection.
 - [x] G1. (2026-07-03) Render all 15 snapshot actuals; build a side-by-side review page
       (golden vs actual per scenario, no-space path) and surface its path in
       chat. Do NOT run `--update-goldens`.
-- [ ] G2. **Only after the user has explicitly approved in chat** (their
+- [x] G2. (2026-07-05, user approved via "go") **Only after the user has explicitly approved in chat** (their
       message, not inferred): run the golden update, re-run the snapshot
       suite (15/15 must pass), commit as `test: bless goldens after approved
       visual changes`. If no approval message exists yet, skip and move on —
